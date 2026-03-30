@@ -2,6 +2,7 @@ import {
   isConnected,
   getAddress,
   signTransaction as freighterSignTransaction,
+  getNetworkDetails,
 } from '@stellar/freighter-api'
 import { NETWORK_CONFIGS } from '../config/stellar'
 
@@ -60,6 +61,9 @@ export class WalletService {
       )
     }
 
+    // Verify the user is on the correct network before connecting
+    await this.assertCorrectNetwork()
+
     try {
       // Use getAddress as it's the more modern version in @stellar/freighter-api
       // but fulfills the role of getPublicKey()
@@ -79,9 +83,7 @@ export class WalletService {
       this.saveAddress(addressObj.address)
       return addressObj.address
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Failed to connect to Freighter: ${error.message}`)
-      }
+      if (error instanceof Error) throw error
       throw new Error('Failed to connect to Freighter wallet')
     }
   }
@@ -99,6 +101,8 @@ export class WalletService {
     if (!this.connectedAddress) {
       throw new Error('Wallet not connected. Please connect first.')
     }
+
+    await this.assertCorrectNetwork()
 
     try {
       const networkPassphrase = NETWORK_CONFIGS[network].networkPassphrase
@@ -133,6 +137,7 @@ export class WalletService {
 
       if (!response.ok) {
         if (response.status === 404) {
+          // Account not yet funded on the network
           return '0'
         }
         throw new Error(`Failed to fetch account: ${response.statusText}`)
@@ -183,6 +188,7 @@ export class WalletService {
       }
 
       this.connectedAddress = addressObj.address
+      this.persistAddress(addressObj.address)
       return addressObj.address
     } catch {
       this.clearAddress()
