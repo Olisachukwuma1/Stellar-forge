@@ -58,16 +58,20 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
 
   const getEventIcon = (type: string) => {
     switch (type) {
-      case 'token_created':
+      case 'created':
         return '🎉'
-      case 'tokens_minted':
+      case 'mint':
         return '➕'
-      case 'tokens_burned':
+      case 'burn':
         return '🔥'
-      case 'metadata_set':
+      case 'meta':
         return '📝'
-      case 'fees_updated':
+      case 'fees':
         return '💰'
+      case 'pause':
+        return '⏸️'
+      case 'unpause':
+        return '▶️'
       default:
         return '📋'
     }
@@ -75,16 +79,20 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
 
   const getEventLabel = (type: string) => {
     switch (type) {
-      case 'token_created':
+      case 'created':
         return 'Token Created'
-      case 'tokens_minted':
+      case 'mint':
         return 'Tokens Minted'
-      case 'tokens_burned':
+      case 'burn':
         return 'Tokens Burned'
-      case 'metadata_set':
+      case 'meta':
         return 'Metadata Set'
-      case 'fees_updated':
+      case 'fees':
         return 'Fees Updated'
+      case 'pause':
+        return 'Contract Paused'
+      case 'unpause':
+        return 'Contract Unpaused'
       default:
         return type
     }
@@ -94,7 +102,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
     const { type, data } = event
 
     switch (type) {
-      case 'token_created':
+      case 'created':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -110,7 +118,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'tokens_minted':
+      case 'mint':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -132,7 +140,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'tokens_burned':
+      case 'burn':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -154,7 +162,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'metadata_set':
+      case 'meta':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -166,7 +174,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'fees_updated':
+      case 'fees':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">

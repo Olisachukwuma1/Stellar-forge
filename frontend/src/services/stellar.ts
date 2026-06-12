@@ -788,6 +788,10 @@ export class StellarService {
     const createdEvent = events.find(
       (e) => e.type === 'created' && e.data.tokenAddress === tokenAddress,
     )
+    // Most-recent metadata event for this token
+    const metaEvent = events
+      .filter((e) => e.type === 'meta' && e.data.tokenAddress === tokenAddress)
+      .sort((a, b) => b.ledger - a.ledger)[0]
 
     return {
       name: createdEvent?.data.name ?? tokenAddress,
@@ -795,6 +799,7 @@ export class StellarService {
       decimals: 7,
       creator: createdEvent?.data.creator ?? '',
       createdAt: createdEvent?.timestamp ?? 0,
+      metadataUri: metaEvent?.data.metadataUri,
     }
   }
 

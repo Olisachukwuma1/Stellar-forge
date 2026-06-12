@@ -215,6 +215,24 @@ export const TokenDetail: React.FC = () => {
               ) : '—'}
             </dd>
           </div>
+          {/* TODO: fetch per-token admin via direct token contract call once a
+              getTokenAdmin(tokenAddress) RPC method is available. For now the
+              token creator and the Soroban token admin are the same at deploy time. */}
+          <div>
+            <dt className="text-gray-500 dark:text-gray-400">Admin</dt>
+            <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
+              {token.creator ? (
+                <ExplorerLink
+                  type="account"
+                  value={token.creator}
+                  network={network}
+                  label={formatAddress(token.creator)}
+                  ariaLabel={`View admin account ${token.creator} on Stellar Expert`}
+                  className="text-indigo-500 hover:underline"
+                />
+              ) : '—'}
+            </dd>
+          </div>
           {token.createdAt ? (
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Created</dt>
