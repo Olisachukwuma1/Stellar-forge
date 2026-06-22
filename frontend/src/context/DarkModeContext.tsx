@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect } from 'react'
+import { useLocalStorage } from '../hooks/useLocalStorage'
 
 interface DarkModeContextValue {
   isDarkMode: boolean
@@ -8,18 +9,13 @@ interface DarkModeContextValue {
 
 const DarkModeContext = createContext<DarkModeContextValue | null>(null)
 
-const DARK_MODE_KEY = 'stellar-forge-dark-mode'
+const DARK_MODE_KEY = 'darkMode'
 
 export const DarkModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    // Check localStorage first
-    const stored = localStorage.getItem(DARK_MODE_KEY)
-    if (stored !== null) {
-      return stored === 'true'
-    }
-    // Fall back to OS preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+  const [isDarkMode, setIsDarkMode] = useLocalStorage<boolean>(
+    DARK_MODE_KEY,
+    window.matchMedia('(prefers-color-scheme: dark)').matches,
+  )
 
   // Apply dark mode class to document
   useEffect(() => {
@@ -30,12 +26,11 @@ export const DarkModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [isDarkMode])
 
-  // Listen for OS preference changes
+  // Listen for OS preference changes — only apply when there is no stored preference
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = (e: MediaQueryListEvent) => {
-      // Only update if no stored preference
-      const stored = localStorage.getItem(DARK_MODE_KEY)
+      const stored = window.localStorage.getItem(DARK_MODE_KEY)
       if (stored === null) {
         setIsDarkMode(e.matches)
       }
@@ -43,20 +38,15 @@ export const DarkModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [])
+  }, [setIsDarkMode])
 
   const toggleDarkMode = useCallback(() => {
-    setIsDarkMode((prev) => {
-      const newValue = !prev
-      localStorage.setItem(DARK_MODE_KEY, String(newValue))
-      return newValue
-    })
-  }, [])
+    setIsDarkMode((prev) => !prev)
+  }, [setIsDarkMode])
 
   const setDarkMode = useCallback((isDark: boolean) => {
     setIsDarkMode(isDark)
-    localStorage.setItem(DARK_MODE_KEY, String(isDark))
-  }, [])
+  }, [setIsDarkMode])
 
   return (
     <DarkModeContext.Provider value={{ isDarkMode, toggleDarkMode, setDarkMode }}>
