@@ -1,0 +1,18 @@
+# Vite build output
+dist/
+dist-ssr/
+
+# Vitest coverage
+coverage/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
