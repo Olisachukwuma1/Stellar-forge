@@ -32,10 +32,12 @@ export type { FactoryState } from '../types'
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): Uint8Array {
-  const h = hex.padEnd(64, '0').slice(0, 64)
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(`Invalid WASM hash: expected exactly 64 hex characters, got "${hex}"`)
+  }
   const bytes = new Uint8Array(32)
   for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
   }
   return bytes
 }
