@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      wasm_size_limit_bytes:
+        description: Maximum optimized contract WASM size in bytes
+        required: false
+        default: "65536"
 
 jobs:
   contract-build:
@@ -24,6 +30,15 @@ jobs:
       - name: Build contract
         run: cargo build --target wasm32v1-none --release
         working-directory: contracts
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Check optimized WASM size
+        run: node scripts/check-wasm-size.mjs --file contracts/target/wasm32v1-none/release/token_factory.wasm --max-bytes "$WASM_SIZE_LIMIT_BYTES"
+        env:
+          WASM_SIZE_LIMIT_BYTES: ${{ github.event.inputs.wasm_size_limit_bytes || '65536' }}
 
   contract-test:
     name: Contract Tests
@@ -131,4 +146,3 @@ jobs:
       - name: Stop Local Stellar Network
         if: always()
         run: docker-compose -f docker-compose.e2e.yml down
-
