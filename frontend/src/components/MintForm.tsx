@@ -71,9 +71,14 @@ export const MintForm: React.FC<MintFormProps> = ({
     },
   })
 
+  // React Hook Form's watch() is not memoizable, so the React Compiler skips
+  // optimizing this component. That's expected and safe here — we read live
+  // form values rather than relying on referential stability.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const tokenSelect = watch('tokenSelect')
   const tokenManual = watch('tokenManual')
   const recipient = watch('recipient')
+  const amount = watch('amount')
 
   // Resolved token address: dropdown selection or manual input
   const resolvedTokenAddress = tokenSelect === MANUAL_VALUE ? tokenManual : tokenSelect
@@ -114,11 +119,10 @@ export const MintForm: React.FC<MintFormProps> = ({
       stellarService.mintTokens({
         tokenAddress: resolvedTokenAddress,
         to: recipient.trim(),
-        amount: watch('amount'),
+        amount,
         feePayment: BASE_FEE_STROOPS,
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stellarService, resolvedTokenAddress, recipient],
+    [stellarService, resolvedTokenAddress, recipient, amount],
   )
 
   const { execute: executeMint, status: txStatus } = useTransaction(mintBuilder)
@@ -156,8 +160,6 @@ export const MintForm: React.FC<MintFormProps> = ({
     ...myTokens.map((t) => ({ value: t.address, label: `${t.name} (${t.symbol})` })),
     { value: MANUAL_VALUE, label: 'Manual input…' },
   ]
-
-  const formAmount = watch('amount')
 
   return (
     <>
@@ -306,7 +308,7 @@ export const MintForm: React.FC<MintFormProps> = ({
               : resolvedTokenAddress,
           },
           { label: 'Recipient', value: recipient },
-          { label: 'Amount', value: formAmount },
+          { label: 'Amount', value: amount },
           { label: 'Estimated Fee', value: ESTIMATED_FEE_DISPLAY },
         ]}
         onConfirm={handleConfirm}

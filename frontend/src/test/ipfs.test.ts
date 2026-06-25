@@ -388,23 +388,22 @@ describe('IPFSService', () => {
         vi.fn().mockImplementation(function (this: XMLHttpRequest) {
           const listeners: Record<string, EventListener> = {}
           const uploadListeners: Record<string, EventListener> = {}
-          const xhr = this
 
           xhrCallCount++
-          xhr.open = vi.fn()
-          xhr.setRequestHeader = vi.fn()
-          xhr.addEventListener = vi.fn((event: string, cb: EventListener) => {
+          this.open = vi.fn()
+          this.setRequestHeader = vi.fn()
+          this.addEventListener = vi.fn((event: string, cb: EventListener) => {
             listeners[event] = cb
           })
-          xhr.send = vi.fn().mockImplementation(() => {
+          this.send = vi.fn().mockImplementation(() => {
             Promise.resolve().then(() => {
               if (xhrCallCount === 1) {
-                ;(xhr as unknown as Record<string, unknown>).status = 503
-                ;(xhr as unknown as Record<string, unknown>).responseText = JSON.stringify({})
+                ;(this as unknown as Record<string, unknown>).status = 503
+                ;(this as unknown as Record<string, unknown>).responseText = JSON.stringify({})
                 listeners['load']?.({} as Event)
               } else {
-                ;(xhr as unknown as Record<string, unknown>).status = 200
-                ;(xhr as unknown as Record<string, unknown>).responseText = JSON.stringify({
+                ;(this as unknown as Record<string, unknown>).status = 200
+                ;(this as unknown as Record<string, unknown>).responseText = JSON.stringify({
                   IpfsHash: 'QmRetryCID',
                 })
                 listeners['load']?.({} as Event)
@@ -412,15 +411,13 @@ describe('IPFSService', () => {
             })
           })
 
-          Object.defineProperty(xhr, 'upload', {
+          Object.defineProperty(this, 'upload', {
             value: {
               addEventListener: vi.fn((event: string, cb: EventListener) => {
                 uploadListeners[event] = cb
               }),
             },
           })
-
-          return xhr
         }),
       )
 

@@ -87,6 +87,22 @@ export function useTransactionHistory(
     [publicKey, page, pageSize, options],
   )
 
+  // The effects below trigger fetches in response to specific values
+  // (publicKey, page, poll interval). They deliberately do NOT depend on
+  // `fetchTransactions` itself: its identity changes on every render because
+  // `options` is a fresh object each time, so listing it would re-run the
+  // effects in a loop. Instead we read the latest fetch function and page from
+  // refs, which keeps the dependency arrays honest and exhaustive.
+  const fetchRef = useRef(fetchTransactions)
+  useEffect(() => {
+    fetchRef.current = fetchTransactions
+  }, [fetchTransactions])
+
+  const pageRef = useRef(page)
+  useEffect(() => {
+    pageRef.current = page
+  }, [page])
+
   // Debounce on publicKey change
   useEffect(() => {
     if (!publicKey) return
@@ -94,16 +110,14 @@ export function useTransactionHistory(
     debounceRef.current = setTimeout(() => {
       setPage(1)
       setTransactions([])
-      fetchTransactions(true)
+      fetchRef.current(true)
     }, 400)
-    // eslint-disable-next-line
   }, [publicKey])
 
   // Fetch on page change
   useEffect(() => {
     if (page === 1) return
-    fetchTransactions()
-    // eslint-disable-next-line
+    fetchRef.current()
   }, [page])
 
   // Polling: re-fetch the first page every pollIntervalMs
@@ -111,9 +125,9 @@ export function useTransactionHistory(
     isMountedRef.current = true
     const id = setInterval(() => {
       if (!publicKey || !isMountedRef.current) return
-      if (page === 1) {
+      if (pageRef.current === 1) {
         cacheRef.current = {}
-        fetchTransactions(true)
+        fetchRef.current(true)
       }
     }, pollIntervalMs)
     pollRef.current = id
@@ -121,7 +135,6 @@ export function useTransactionHistory(
       isMountedRef.current = false
       clearInterval(id)
     }
-    // eslint-disable-next-line
   }, [publicKey, pollIntervalMs])
 
   const loadMore = useCallback(() => {
@@ -132,9 +145,8 @@ export function useTransactionHistory(
     cacheRef.current = {}
     setPage(1)
     setTransactions([])
-    fetchTransactions(true)
-    // eslint-disable-next-line
-  }, [publicKey, pageSize, options])
+    fetchRef.current(true)
+  }, [])
 
   return { transactions, loading, error, hasMore, loadMore, lastUpdated, refresh }
 }
