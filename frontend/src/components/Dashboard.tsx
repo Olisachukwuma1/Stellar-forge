@@ -73,7 +73,10 @@ const Dashboard: React.FC<DashboardProps> = memo(() => {
           />
         </div>
         <div className="space-y-1 w-full sm:w-auto sm:min-w-[180px]">
-          <label htmlFor="sort-order" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor="sort-order"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Sort order
           </label>
           <select
@@ -97,11 +100,15 @@ const Dashboard: React.FC<DashboardProps> = memo(() => {
         </button>
       </div>
 
-      {filteredTokens.length === 0 ? (
+      {isLoading ? (
+        <ul className="space-y-3" aria-busy="true" aria-label="Loading tokens...">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <TokenCardSkeleton key={i} />
+          ))}
+        </ul>
+      ) : filteredTokens.length === 0 ? (
         <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm sm:text-base">
-          {isFilterActive
-            ? 'No tokens match your search.'
-            : 'No tokens have been deployed yet.'}
+          {isFilterActive ? 'No tokens match your search.' : 'No tokens have been deployed yet.'}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -110,10 +117,16 @@ const Dashboard: React.FC<DashboardProps> = memo(() => {
               <Card>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="min-w-0">
-                    <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white break-words">{token.name}</span>
-                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">({token.symbol})</span>
+                    <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white break-words">
+                      {token.name}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                      ({token.symbol})
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Decimals: {token.decimals}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                    Decimals: {token.decimals}
+                  </span>
                 </div>
                 <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 space-y-1">
                   <div>

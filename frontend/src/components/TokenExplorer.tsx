@@ -27,7 +27,7 @@ export const TokenExplorer: React.FC = () => {
   const [creatorFilter, setCreatorFilter] = useState('')
   const debouncedSearchInput = useDebounce(searchInput, 300)
   const debouncedCreatorFilter = useDebounce(creatorFilter, 300)
-  
+
   const [searchResult, setSearchResult] = useState<TokenWithMetadata | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
@@ -106,11 +106,9 @@ export const TokenExplorer: React.FC = () => {
 
   const getFilteredTokens = (): TokenWithMetadata[] => {
     if (!debouncedCreatorFilter) return tokens
-    
+
     const filterLower = debouncedCreatorFilter.toLowerCase()
-    return tokens.filter(t => 
-      t.creator && t.creator.toLowerCase().includes(filterLower)
-    )
+    return tokens.filter((t) => t.creator && t.creator.toLowerCase().includes(filterLower))
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -189,7 +187,10 @@ export const TokenExplorer: React.FC = () => {
           {t('tokenExplorer.title', 'Token Explorer')}
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          {t('tokenExplorer.description', 'Search for any token by address or index, or browse all tokens')}
+          {t(
+            'tokenExplorer.description',
+            'Search for any token by address or index, or browse all tokens',
+          )}
         </p>
       </div>
 
@@ -200,14 +201,20 @@ export const TokenExplorer: React.FC = () => {
             label={t('tokenExplorer.searchLabel', 'Token Address or Index')}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t('tokenExplorer.searchPlaceholder', 'Enter token address (C...) or index (0, 1, 2...)')}
+            placeholder={t(
+              'tokenExplorer.searchPlaceholder',
+              'Enter token address (C...) or index (0, 1, 2...)',
+            )}
             disabled={searching}
           />
           <Input
             label={t('tokenExplorer.filterByCreator', 'Filter by Creator Address')}
             value={creatorFilter}
             onChange={(e) => setCreatorFilter(e.target.value)}
-            placeholder={t('tokenExplorer.creatorPlaceholder', 'Enter creator address to filter tokens (optional)')}
+            placeholder={t(
+              'tokenExplorer.creatorPlaceholder',
+              'Enter creator address to filter tokens (optional)',
+            )}
             disabled={searching}
           />
           {searchError && (
@@ -216,7 +223,9 @@ export const TokenExplorer: React.FC = () => {
             </p>
           )}
           <Button type="submit" disabled={searching} loading={searching}>
-            {searching ? t('tokenExplorer.searching', 'Searching...') : t('tokenExplorer.search', 'Search')}
+            {searching
+              ? t('tokenExplorer.searching', 'Searching...')
+              : t('tokenExplorer.search', 'Search')}
           </Button>
         </form>
       </Card>
@@ -252,7 +261,11 @@ export const TokenExplorer: React.FC = () => {
           <div className="space-y-4">
             {getFilteredTokens().map((token, index) => (
               <Card key={`${token.address}-${index}`}>
-                <TokenDisplay token={token} showIndex index={(currentPage - 1) * tokensPerPage + index} />
+                <TokenDisplay
+                  token={token}
+                  showIndex
+                  index={(currentPage - 1) * tokensPerPage + index}
+                />
               </Card>
             ))}
           </div>
@@ -293,20 +306,16 @@ const TokenDisplay: React.FC<TokenDisplayProps> = ({ token, showIndex, index }) 
             alt={`${token.name} logo`}
             className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none'
+              ;(e.target as HTMLImageElement).style.display = 'none'
             }}
           />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             {showIndex !== undefined && index !== undefined && (
-              <span className="text-sm font-mono text-gray-500 dark:text-gray-400">
-                #{index}
-              </span>
+              <span className="text-sm font-mono text-gray-500 dark:text-gray-400">#{index}</span>
             )}
-            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {token.name}
-            </h4>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{token.name}</h4>
             <span className="text-sm font-mono text-gray-500 dark:text-gray-400">
               ({token.symbol})
             </span>
