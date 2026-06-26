@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useStellarContext } from '../context/StellarContext'
@@ -11,6 +11,7 @@ import type { TokenInfo, IPFSMetadata } from '../types'
 import { Card, Button, Input, Spinner } from './UI'
 import { CopyButton } from './CopyButton'
 import { PaginationControls } from './UI/PaginationControls'
+import { useDebounce } from '../hooks/useDebounce'
 
 interface TokenWithMetadata extends TokenInfo {
   address: string
@@ -23,6 +24,9 @@ export const TokenExplorer: React.FC = () => {
   const { addToast } = useToast()
 
   const [searchInput, setSearchInput] = useState('')
+  const [creatorFilter, setCreatorFilter] = useState('')
+  const debouncedCreatorFilter = useDebounce(creatorFilter, 300)
+
   const [searchResult, setSearchResult] = useState<TokenWithMetadata | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
@@ -42,6 +46,32 @@ export const TokenExplorer: React.FC = () => {
       .catch(() => setTotalTokens(0))
   }, [stellarService])
 
+  const loadTokenByAddress = useCallback(
+    async (address: string): Promise<TokenWithMetadata | null> => {
+      try {
+        const info = await stellarService.getTokenInfoByAddress(address)
+
+        let metadata: IPFSMetadata | null = null
+        if (info.metadataUri) {
+          try {
+            metadata = await ipfsService.getMetadata(info.metadataUri)
+          } catch {
+            // Metadata fetch failure is non-fatal
+          }
+        }
+
+        return {
+          ...info,
+          address,
+          metadata,
+        }
+      } catch {
+        return null
+      }
+    },
+    [stellarService],
+  )
+
   // Load tokens for current page
   useEffect(() => {
     if (totalTokens === 0) return
@@ -55,14 +85,14 @@ export const TokenExplorer: React.FC = () => {
       .getContractEvents(STELLAR_CONFIG.factoryContractId || '', 1000)
       .then(({ events }) => {
         const tokenCreatedEvents = events
-          .filter((e) => e.type === 'token_created')
+          .filter((e) => e.type === 'created')
           .sort((a, b) => a.ledger - b.ledger) // Sort by creation order
 
         const promises: Promise<TokenWithMetadata | null>[] = []
         for (let i = startIndex; i < endIndex; i++) {
           const event = tokenCreatedEvents[i]
           if (event?.data.tokenAddress) {
-            promises.push(loadTokenByAddress(event.data.tokenAddress, i))
+            promises.push(loadTokenByAddress(event.data.tokenAddress))
           }
         }
 
@@ -74,29 +104,13 @@ export const TokenExplorer: React.FC = () => {
       })
       .catch(() => setTokens([]))
       .finally(() => setLoadingTokens(false))
-  }, [currentPage, totalTokens, stellarService])
+  }, [currentPage, totalTokens, stellarService, loadTokenByAddress])
 
-  const loadTokenByAddress = async (address: string): Promise<TokenWithMetadata | null> => {
-    try {
-      const info = await stellarService.getTokenInfo(address)
+  const getFilteredTokens = (): TokenWithMetadata[] => {
+    if (!debouncedCreatorFilter) return tokens
 
-      let metadata: IPFSMetadata | null = null
-      if (info.metadataUri) {
-        try {
-          metadata = await ipfsService.getMetadata(info.metadataUri)
-        } catch {
-          // Metadata fetch failure is non-fatal
-        }
-      }
-
-      return {
-        ...info,
-        address,
-        metadata,
-      }
-    } catch {
-      return null
-    }
+    const filterLower = debouncedCreatorFilter.toLowerCase()
+    return tokens.filter((t) => t.creator && t.creator.toLowerCase().includes(filterLower))
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -128,7 +142,7 @@ export const TokenExplorer: React.FC = () => {
           1000,
         )
         const tokenCreatedEvents = events
-          .filter((e) => e.type === 'token_created')
+          .filter((e) => e.type === 'created')
           .sort((a, b) => a.ledger - b.ledger)
 
         const event = tokenCreatedEvents[index]
@@ -137,7 +151,7 @@ export const TokenExplorer: React.FC = () => {
           return
         }
 
-        const result = await loadTokenByAddress(event.data.tokenAddress, index)
+        const result = await loadTokenByAddress(event.data.tokenAddress)
         if (result) {
           setSearchResult(result)
         } else {
@@ -175,7 +189,10 @@ export const TokenExplorer: React.FC = () => {
           {t('tokenExplorer.title', 'Token Explorer')}
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          {t('tokenExplorer.description', 'Search for any token by address or index, or browse all tokens')}
+          {t(
+            'tokenExplorer.description',
+            'Search for any token by address or index, or browse all tokens',
+          )}
         </p>
       </div>
 
@@ -186,7 +203,20 @@ export const TokenExplorer: React.FC = () => {
             label={t('tokenExplorer.searchLabel', 'Token Address or Index')}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t('tokenExplorer.searchPlaceholder', 'Enter token address (C...) or index (0, 1, 2...)')}
+            placeholder={t(
+              'tokenExplorer.searchPlaceholder',
+              'Enter token address (C...) or index (0, 1, 2...)',
+            )}
+            disabled={searching}
+          />
+          <Input
+            label={t('tokenExplorer.filterByCreator', 'Filter by Creator Address')}
+            value={creatorFilter}
+            onChange={(e) => setCreatorFilter(e.target.value)}
+            placeholder={t(
+              'tokenExplorer.creatorPlaceholder',
+              'Enter creator address to filter tokens (optional)',
+            )}
             disabled={searching}
           />
           {searchError && (
@@ -195,7 +225,9 @@ export const TokenExplorer: React.FC = () => {
             </p>
           )}
           <Button type="submit" disabled={searching} loading={searching}>
-            {searching ? t('tokenExplorer.searching', 'Searching...') : t('tokenExplorer.search', 'Search')}
+            {searching
+              ? t('tokenExplorer.searching', 'Searching...')
+              : t('tokenExplorer.search', 'Search')}
           </Button>
         </form>
       </Card>
@@ -219,23 +251,29 @@ export const TokenExplorer: React.FC = () => {
           <div className="flex justify-center py-12">
             <Spinner size="lg" label={t('tokenExplorer.loadingTokens', 'Loading tokens...')} />
           </div>
-        ) : tokens.length === 0 ? (
+        ) : getFilteredTokens().length === 0 ? (
           <Card>
             <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-              {t('tokenExplorer.noTokens', 'No tokens have been deployed yet')}
+              {debouncedCreatorFilter
+                ? t('tokenExplorer.noTokensForCreator', 'No tokens found for this creator address')
+                : t('tokenExplorer.noTokens', 'No tokens have been deployed yet')}
             </p>
           </Card>
         ) : (
           <div className="space-y-4">
-            {tokens.map((token, index) => (
+            {getFilteredTokens().map((token, index) => (
               <Card key={`${token.address}-${index}`}>
-                <TokenDisplay token={token} showIndex index={(currentPage - 1) * tokensPerPage + index} />
+                <TokenDisplay
+                  token={token}
+                  showIndex
+                  index={(currentPage - 1) * tokensPerPage + index}
+                />
               </Card>
             ))}
           </div>
         )}
 
-        {totalPages > 1 && !loadingTokens && (
+        {totalPages > 1 && !loadingTokens && !debouncedCreatorFilter && (
           <PaginationControls
             page={currentPage}
             totalPages={totalPages}
@@ -270,20 +308,16 @@ const TokenDisplay: React.FC<TokenDisplayProps> = ({ token, showIndex, index }) 
             alt={`${token.name} logo`}
             className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none'
+              ;(e.target as HTMLImageElement).style.display = 'none'
             }}
           />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             {showIndex !== undefined && index !== undefined && (
-              <span className="text-sm font-mono text-gray-500 dark:text-gray-400">
-                #{index}
-              </span>
+              <span className="text-sm font-mono text-gray-500 dark:text-gray-400">#{index}</span>
             )}
-            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {token.name}
-            </h4>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{token.name}</h4>
             <span className="text-sm font-mono text-gray-500 dark:text-gray-400">
               ({token.symbol})
             </span>

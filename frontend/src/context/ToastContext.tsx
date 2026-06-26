@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useRef, useState } from 'react'
 
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info'
 
@@ -14,6 +14,7 @@ interface ToastContextValue {
   removeToast: (id: number) => void
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const ToastContext = createContext<ToastContextValue | null>(null)
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

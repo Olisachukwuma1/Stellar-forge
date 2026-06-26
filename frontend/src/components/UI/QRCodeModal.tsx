@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { Button } from './Button'
 
@@ -33,6 +33,9 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, address, onClo
   }
 
   return (
+    // Click-outside-to-dismiss is a mouse-only convenience; Escape (above) and
+    // the close button below already give full keyboard/AT access to closing.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       role="dialog"

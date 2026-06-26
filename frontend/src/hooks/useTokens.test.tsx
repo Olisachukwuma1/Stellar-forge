@@ -7,7 +7,7 @@ vi.mock('../services/stellar', () => ({
   stellarService: {
     getTokensByCreator: vi.fn(),
     getContractEvents: vi.fn(),
-    getTokenInfo: vi.fn(),
+    getTokenInfoByAddress: vi.fn(),
   },
 }))
 
@@ -52,7 +52,7 @@ describe('useTokens', () => {
       events: [
         {
           id: '1',
-          type: 'token_created',
+          type: 'created',
           ledger: 1,
           timestamp: 1000,
           txHash: 'x',
@@ -60,7 +60,7 @@ describe('useTokens', () => {
         },
         {
           id: '2',
-          type: 'token_created',
+          type: 'created',
           ledger: 2,
           timestamp: 2000,
           txHash: 'y',
@@ -69,14 +69,14 @@ describe('useTokens', () => {
       ],
       cursor: null,
     })
-    vi.mocked(stellarService.getTokenInfo)
+    vi.mocked(stellarService.getTokenInfoByAddress)
       .mockResolvedValueOnce(TOKEN_A)
       .mockResolvedValueOnce(TOKEN_B)
 
     const { result } = renderHook(() => useTokens())
 
     await waitFor(() => expect(result.current.tokens).toHaveLength(2))
-    expect(stellarService.getTokenInfo).toHaveBeenCalledTimes(2)
+    expect(stellarService.getTokenInfoByAddress).toHaveBeenCalledTimes(2)
   })
 
   it('populates error on RPC failure', async () => {

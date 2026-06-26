@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import React, { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { formatAddress, formatTimestamp, timeAgo } from '../utils/formatting'
 import { CopyButton } from './CopyButton'

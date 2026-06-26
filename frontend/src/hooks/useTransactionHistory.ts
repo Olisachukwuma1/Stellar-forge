@@ -1,28 +1,42 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { STELLAR_CONFIG } from '../config/stellar';
 
-export type TransactionType = 'create' | 'mint' | 'burn' | 'other';
+export type TransactionType = 'create' | 'mint' | 'burn' | 'other'
 
 export interface TransactionHistoryItem {
-  id: string;
-  type: TransactionType;
-  token: string;
-  amount: string;
-  date: string;
-  status: 'success' | 'failed';
-  hash: string;
+  id: string
+  type: TransactionType
+  token: string
+  amount: string
+  date: string
+  status: 'success' | 'failed'
+  hash: string
 }
 
 interface UseTransactionHistoryOptions {
-  assetCodes?: string[];
-  issuer?: string;
-  contractIds?: string[];
-  pageSize?: number;
+  assetCodes?: string[]
+  issuer?: string
+  contractIds?: string[]
+  pageSize?: number
+  pollIntervalMs?: number
+}
+
+/** The subset of Horizon's polymorphic operation record shape this hook reads. */
+interface HorizonOperationRecord {
+  id: string
+  type: string
+  name?: string
+  asset_code?: string
+  asset_issuer?: string
+  amount?: string
+  created_at: string
+  transaction_successful: boolean
+  transaction_hash: string
 }
 
 export function useTransactionHistory(
   publicKey: string | undefined,
-  options: UseTransactionHistoryOptions = {}
+  options: UseTransactionHistoryOptions = {},
 ) {
   const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,7 +48,8 @@ export function useTransactionHistory(
   // Tracks the paging_token of the last fetched record for cursor-based pagination
   const cursorRef = useRef<string>('');
 
-  const pageSize = options.pageSize || 10;
+  const pageSize = options.pageSize || 10
+  const pollIntervalMs = options.pollIntervalMs ?? 30_000
 
   // Stable string key derived from filter values so the cache is filter-aware
   const filterKey = JSON.stringify({
@@ -45,9 +60,9 @@ export function useTransactionHistory(
 
   const fetchTransactions = useCallback(
     async (reset = false) => {
-      if (!publicKey) return;
-      setLoading(true);
-      setError(null);
+      if (!publicKey) return
+      setLoading(true)
+      setError(null)
       try {
         const cacheKey = `${publicKey}-${page}-${filterKey}`;
         const cached = cacheRef.current[cacheKey];
@@ -79,7 +94,7 @@ export function useTransactionHistory(
       } catch (e: any) {
         setError(e.message || 'Unknown error');
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,8 +103,8 @@ export function useTransactionHistory(
 
   // Debounce on publicKey change
   useEffect(() => {
-    if (!publicKey) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!publicKey) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       cursorRef.current = '';
       setPage(1);
@@ -101,49 +116,75 @@ export function useTransactionHistory(
 
   // Fetch on page change
   useEffect(() => {
-    if (page === 1) return;
-    fetchTransactions();
-    // eslint-disable-next-line
-  }, [page]);
+    if (page === 1) return
+    fetchRef.current()
+  }, [page])
+
+  // Polling: re-fetch the first page every pollIntervalMs
+  useEffect(() => {
+    isMountedRef.current = true
+    const id = setInterval(() => {
+      if (!publicKey || !isMountedRef.current) return
+      if (pageRef.current === 1) {
+        cacheRef.current = {}
+        fetchRef.current(true)
+      }
+    }, pollIntervalMs)
+    pollRef.current = id
+    return () => {
+      isMountedRef.current = false
+      clearInterval(id)
+    }
+  }, [publicKey, pollIntervalMs])
 
   const loadMore = useCallback(() => {
-    if (!loading && hasMore) setPage((p: number) => p + 1);
-  }, [loading, hasMore]);
+    if (!loading && hasMore) setPage((p: number) => p + 1)
+  }, [loading, hasMore])
 
-  return { transactions, loading, error, hasMore, loadMore };
+  const refresh = useCallback(() => {
+    cacheRef.current = {}
+    setPage(1)
+    setTransactions([])
+    fetchRef.current(true)
+  }, [])
+
+  return { transactions, loading, error, hasMore, loadMore, lastUpdated, refresh }
 }
 
-function parseOperation(op: any, options: UseTransactionHistoryOptions): TransactionHistoryItem | null {
+function parseOperation(
+  op: HorizonOperationRecord,
+  options: UseTransactionHistoryOptions,
+): TransactionHistoryItem | null {
   // Filter by operation type and asset/issuer/contract if provided
   // Token creation: manage_data or create_account or custom contract
   // Mint: payment or custom contract
   // Burn: payment with negative amount or custom contract
   // This logic may need to be adapted for your token factory specifics
-  let type: TransactionType = 'other';
-  let token = '';
-  let amount = '';
+  let type: TransactionType = 'other'
+  let token = ''
+  let amount = ''
   if (op.type === 'manage_data' && op.name && op.name.toLowerCase().includes('token')) {
-    type = 'create';
-    token = op.name;
-  } else if (op.type === 'payment' && op.asset_code) {
+    type = 'create'
+    token = op.name
+  } else if (op.type === 'payment' && op.asset_code && op.amount) {
     if (Number(op.amount) > 0) {
-      type = 'mint';
-      token = op.asset_code;
-      amount = op.amount;
+      type = 'mint'
+      token = op.asset_code
+      amount = op.amount
     } else if (Number(op.amount) < 0) {
-      type = 'burn';
-      token = op.asset_code;
-      amount = op.amount;
+      type = 'burn'
+      token = op.asset_code
+      amount = op.amount
     }
   } else if (op.type === 'change_trust' && op.asset_code) {
-    type = 'create';
-    token = op.asset_code;
+    type = 'create'
+    token = op.asset_code
   }
   // Optionally filter by assetCodes, issuer, contractIds
-  if (options.assetCodes && token && !options.assetCodes.includes(token)) return null;
-  if (options.issuer && op.asset_issuer && op.asset_issuer !== options.issuer) return null;
+  if (options.assetCodes && token && !options.assetCodes.includes(token)) return null
+  if (options.issuer && op.asset_issuer && op.asset_issuer !== options.issuer) return null
   // Add more contractId logic if needed
-  if (type === 'other') return null;
+  if (type === 'other') return null
   return {
     id: op.id,
     type,
@@ -152,5 +193,5 @@ function parseOperation(op: any, options: UseTransactionHistoryOptions): Transac
     date: op.created_at,
     status: op.transaction_successful ? 'success' : 'failed',
     hash: op.transaction_hash,
-  };
+  }
 }

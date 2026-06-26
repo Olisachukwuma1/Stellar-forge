@@ -1,5 +1,6 @@
+import React from 'react'
 import { useWalletContext } from '../context/WalletContext'
-import { truncateAddress, formatXLM } from '../utils/formatting'
+import { formatXLM, truncateAddress } from '../utils/formatting'
 import { Button } from './UI/Button'
 import { Spinner } from './UI/Spinner'
 import { CopyButton } from './CopyButton'

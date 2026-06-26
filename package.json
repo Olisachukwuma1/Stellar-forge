@@ -6,9 +6,14 @@
   "description": "StellarForge - Stellar Token Deployer",
   "scripts": {
     "prepare": "husky",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "contract:compile": "cd contracts/token-factory && cargo build --target wasm32-unknown-unknown --release",
+    "frontend:dev": "cd frontend && npm run dev",
+    "start": "npm run contract:compile && npm run frontend:dev",
+    "dev:all": "concurrently -n contract,frontend -c cyan,green \"npm run contract:compile\" \"npm run frontend:dev\""
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@semantic-release/changelog": "^6.0.3",

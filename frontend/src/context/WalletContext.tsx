@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react'
 import { walletService } from '../services/wallet'
 import { useNetwork } from './NetworkContext'
 import { WatchWalletChanges } from '@stellar/freighter-api'
@@ -27,7 +35,8 @@ interface WalletContextValue {
   refreshBalance: () => Promise<void>
 }
 
-const WalletContext = createContext<WalletContextValue | null>(null)
+// eslint-disable-next-line react-refresh/only-export-components
+export const WalletContext = createContext<WalletContextValue | null>(null)
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { network } = useNetworkSafe()
@@ -41,14 +50,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isInstalled, setIsInstalled] = useState<boolean>(true)
 
   // Stable callback — only recreated when network changes
-  const fetchBalance = useCallback(async (address: string) => {
-    try {
-      const balance = await walletService.getBalance(address, network)
-      setWallet((prev: WalletState) => ({ ...prev, balance }))
-    } catch {
-      // Balance fetch failure is non-critical; wallet remains connected
-    }
-  }, [network])
+  const fetchBalance = useCallback(
+    async (address: string) => {
+      try {
+        const balance = await walletService.getBalance(address, network)
+        setWallet((prev: WalletState) => ({ ...prev, balance }))
+      } catch {
+        // Balance fetch failure is non-critical; wallet remains connected
+      }
+    },
+    [network],
+  )
 
   // Stable callback — only recreated when fetchBalance changes (i.e. network switch)
   const connect = useCallback(async () => {
@@ -102,7 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     try {
       watcher = new WatchWalletChanges()
-      
+
       watcher.watch(async (result) => {
         const { address: newAddress, network: newNetwork } = result
 

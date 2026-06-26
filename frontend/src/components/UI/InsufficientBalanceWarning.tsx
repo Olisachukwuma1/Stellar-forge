@@ -1,3 +1,4 @@
+import React from 'react'
 import { useFriendbot } from '../../hooks/useFriendbot'
 import { useWalletContext } from '../../context/WalletContext'
 import { useToast } from '../../context/ToastContext'

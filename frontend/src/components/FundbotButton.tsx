@@ -1,3 +1,4 @@
+import React from 'react'
 import { useNetwork } from '../context/NetworkContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useToast } from '../context/ToastContext'

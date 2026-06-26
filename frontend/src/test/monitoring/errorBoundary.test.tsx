@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { ErrorBoundary } from '../../lib/monitoring/errorBoundary'
 
-const mockCaptureException = vi.fn()
+const { mockCaptureException } = vi.hoisted(() => ({
+  mockCaptureException: vi.fn(),
+}))
 vi.mock('../../lib/monitoring/sentry', () => ({
   captureException: mockCaptureException,
 }))
@@ -49,5 +51,45 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     )
     expect(screen.getByText('custom fallback')).toBeTruthy()
+  })
+
+  it('allows a route fallback to reset the boundary and display recovered content', async () => {
+    // A ref (not a render-time mutation) so React's concurrent-render retry
+    // can't silently "absorb" the throw by re-invoking with different state.
+    const shouldThrow = { current: true }
+
+    function FlakyRoute(): JSX.Element {
+      if (shouldThrow.current) {
+        throw new Error('boom-once')
+      }
+      return <div>route restored</div>
+    }
+
+    const RouteFallback = ({ resetErrorBoundary }: { resetErrorBoundary?: () => void }) => (
+      <div>
+        <div>route error</div>
+        <button
+          onClick={() => {
+            shouldThrow.current = false
+            resetErrorBoundary?.()
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    )
+
+    render(
+      <ErrorBoundary fallback={<RouteFallback />}>
+        <FlakyRoute />
+      </ErrorBoundary>,
+    )
+
+    expect(screen.getByText('route error')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    expect(await screen.findByText('route restored')).toBeTruthy()
   })
 })

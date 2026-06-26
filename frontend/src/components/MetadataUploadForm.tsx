@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input, Button } from './UI'
 import { useToast } from '../context/ToastContext'
 import { ipfsService } from '../services/ipfs'
 import { isIpfsConfigured } from '../config/env'
 import { isValidImageFile } from '../utils/validation'
+import { DropZone } from './DropZone'
+import { logger } from '../utils/logger'
 
 interface MetadataUploadFormProps {
   onUploadComplete: (metadataUri: string) => void
@@ -28,14 +30,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
 
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) {
-      setImageFile(null)
-      setImagePreview(null)
-      return
-    }
-
+  const handleImageSelect = (file: File) => {
     const validation = isValidImageFile(file)
     if (!validation.valid) {
       addToast(validation.error || 'Invalid image file', 'error')
@@ -87,6 +82,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
         description,
         tokenName,
         (progress) => setUploadProgress(progress),
+        (attempt) => addToast(`Retrying upload… (attempt ${attempt}/3)`, 'warning'),
       )
 
       addToast('Metadata uploaded successfully!', 'success')
@@ -98,11 +94,8 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
       setImageFile(null)
       setUploadProgress(0)
     } catch (error) {
-      console.error('Upload error:', error)
-      addToast(
-        error instanceof Error ? error.message : 'Failed to upload metadata',
-        'error',
-      )
+      logger.error('Upload error:', error)
+      addToast(error instanceof Error ? error.message : 'Failed to upload metadata', 'error')
     } finally {
       setIsUploading(false)
     }
@@ -139,7 +132,10 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <label
+          htmlFor="description"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
           {t('tokenForm.descriptionLabel')}
         </label>
         <textarea
@@ -153,22 +149,14 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="image" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Token Image (JPEG, PNG, GIF - max 5MB)
-        </label>
-        <input
-          id="image"
-          type="file"
-          accept="image/jpeg,image/png,image/gif"
-          onChange={handleImageChange}
-          disabled={isUploading || isLoading}
-          className="block w-full text-sm text-gray-500 dark:text-gray-400
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-md file:border-0
-            file:text-sm file:font-semibold
-            file:bg-blue-50 file:text-blue-700
-            dark:file:bg-blue-900/30 dark:file:text-blue-300
-            hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
+        {/* Not a <label> — DropZone is a role="button" div with its own aria-label, not a labelable form control */}
+        <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Token Image (JPEG, PNG, GIF — max 5MB)
+        </p>
+        <DropZone
+          onFileSelect={handleImageSelect}
+          acceptedTypes={['image/jpeg', 'image/png', 'image/gif']}
+          maxSizeMB={5}
         />
         {imagePreview && (
           <div className="mt-4 flex flex-col items-center space-y-2">
@@ -178,9 +166,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
               className="max-w-32 max-h-32 object-contain border border-gray-300 dark:border-gray-600 rounded-md"
             />
             <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {imageFile?.name}
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{imageFile?.name}</p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {(imageFile?.size || 0) / 1024 / 1024 < 1
                   ? `${Math.round((imageFile?.size || 0) / 1024)} KB`
@@ -213,11 +199,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
         </div>
       )}
 
-      <Button
-        type="submit"
-        disabled={!imageFile || isUploading || isLoading}
-        className="w-full"
-      >
+      <Button type="submit" disabled={!imageFile || isUploading || isLoading} className="w-full">
         {isUploading ? 'Uploading...' : 'Upload Metadata'}
       </Button>
     </form>

@@ -1,6 +1,7 @@
 // Stellar SDK integration service
 import { STELLAR_CONFIG, NETWORK_CONFIGS } from '../config/stellar'
 import { walletService } from './wallet'
+import { captureContractError } from '../lib/monitoring/sentry'
 import type {
   AppError,
   ContractEvent,
@@ -31,10 +32,12 @@ export type { FactoryState } from '../types'
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): Uint8Array {
-  const h = hex.padEnd(64, '0').slice(0, 64)
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(`Invalid WASM hash: expected exactly 64 hex characters, got "${hex}"`)
+  }
   const bytes = new Uint8Array(32)
   for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
   }
   return bytes
 }
@@ -264,17 +267,21 @@ function scValToString(val: xdr.ScVal): string {
 // ── Event parsing ─────────────────────────────────────────────────────────────
 
 const EVENT_TOPICS: ContractEventType[] = [
-  'token_created',
-  'tokens_minted',
-  'tokens_burned',
-  'metadata_set',
-  'fees_updated',
+  'init',
+  'created',
+  'meta',
+  'mint',
+  'burn',
+  'fees',
+  'pause',
+  'unpause',
+  'admin_update',
 ]
 
 async function parseRpcEvent(raw: RpcEventResponse): Promise<ContractEvent | null> {
   try {
-    if (!raw.topic?.length) return null
-    const topicVal = xdr.ScVal.fromXDR(raw.topic[0], 'base64')
+    if (!raw.topic?.length || raw.topic.length < 2) return null
+    const topicVal = xdr.ScVal.fromXDR(raw.topic[1], 'base64') // second topic is the action
     const eventType = scValToString(topicVal) as ContractEventType
     if (!EVENT_TOPICS.includes(eventType)) return null
 
@@ -282,27 +289,42 @@ async function parseRpcEvent(raw: RpcEventResponse): Promise<ContractEvent | nul
     const data: Record<string, string> = {}
 
     switch (eventType) {
-      case 'token_created':
+      case 'init':
+        data.admin = scValToString(items[0])
+        break
+      case 'created':
         data.tokenAddress = scValToString(items[0])
         data.creator = scValToString(items[1])
+        data.name = scValToString(items[2])
+        data.symbol = scValToString(items[3])
         break
-      case 'tokens_minted':
+      case 'meta':
+        data.tokenAddress = scValToString(items[0])
+        data.metadataUri = scValToString(items[1])
+        break
+      case 'mint':
         data.tokenAddress = scValToString(items[0])
         data.to = scValToString(items[1])
         data.amount = scValToString(items[2])
         break
-      case 'tokens_burned':
+      case 'burn':
         data.tokenAddress = scValToString(items[0])
         data.from = scValToString(items[1])
         data.amount = scValToString(items[2])
         break
-      case 'metadata_set':
-        data.tokenAddress = scValToString(items[0])
-        data.metadataUri = scValToString(items[1])
-        break
-      case 'fees_updated':
+      case 'fees':
         data.baseFee = scValToString(items[0])
         data.metadataFee = scValToString(items[1])
+        break
+      case 'pause':
+        data.admin = scValToString(items[0])
+        break
+      case 'unpause':
+        data.admin = scValToString(items[0])
+        break
+      case 'admin_update':
+        data.currentAdmin = scValToString(items[0])
+        data.newAdmin = scValToString(items[1])
         break
     }
 
@@ -310,9 +332,7 @@ async function parseRpcEvent(raw: RpcEventResponse): Promise<ContractEvent | nul
       id: raw.id,
       type: eventType,
       ledger: raw.ledger,
-      timestamp: raw.ledgerClosedAt
-        ? Math.floor(new Date(raw.ledgerClosedAt).getTime() / 1000)
-        : 0,
+      timestamp: raw.ledgerClosedAt ? Math.floor(new Date(raw.ledgerClosedAt).getTime() / 1000) : 0,
       txHash: raw.txHash,
       data,
     }
@@ -380,6 +400,7 @@ export class StellarService {
     tokenWasmHash: string
     feePayment: string
   }): Promise<DeploymentResult> {
+    const functionName = 'deployToken'
     try {
       const contractId = STELLAR_CONFIG.factoryContractId
       if (!contractId) throw new Error('Factory contract ID is not configured')
@@ -419,6 +440,13 @@ export class StellarService {
       return { tokenAddress, transactionHash: hash, success: true }
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { name: params.name, symbol: params.symbol, decimals: params.decimals },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -435,6 +463,7 @@ export class StellarService {
     amount: string
     feePayment: string
   }): Promise<string> {
+    const functionName = 'mintTokens'
     try {
       const contractId = STELLAR_CONFIG.factoryContractId
       if (!contractId) throw new Error('Factory contract ID is not configured')
@@ -449,9 +478,9 @@ export class StellarService {
         .addOperation(
           contract.call(
             'mint_tokens',
-            new Address(params.tokenAddress).toScVal(),  // token_address
-            new Address(sourceAddress).toScVal(),         // admin (caller)
-            new Address(params.to).toScVal(),             // to
+            new Address(params.tokenAddress).toScVal(), // token_address
+            new Address(sourceAddress).toScVal(), // admin (caller)
+            new Address(params.to).toScVal(), // to
             nativeToScVal(BigInt(params.amount), { type: 'i128' }),
             nativeToScVal(BigInt(params.feePayment), { type: 'i128' }),
           ),
@@ -462,6 +491,13 @@ export class StellarService {
       return await simulateAndSubmit(server, tx, this.network)
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { tokenAddress: params.tokenAddress, amount: params.amount },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -473,6 +509,7 @@ export class StellarService {
    * `amount` is a decimal string representation of an i128 value.
    */
   async burnTokens(params: { tokenAddress: string; amount: string }): Promise<string> {
+    const functionName = 'burnTokens'
     try {
       const contractId = STELLAR_CONFIG.factoryContractId
       if (!contractId) throw new Error('Factory contract ID is not configured')
@@ -488,7 +525,7 @@ export class StellarService {
           contract.call(
             'burn',
             new Address(params.tokenAddress).toScVal(), // token_address
-            new Address(sourceAddress).toScVal(),        // from (caller)
+            new Address(sourceAddress).toScVal(), // from (caller)
             nativeToScVal(BigInt(params.amount), { type: 'i128' }),
           ),
         )
@@ -498,6 +535,13 @@ export class StellarService {
       return await simulateAndSubmit(server, tx, this.network)
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { tokenAddress: params.tokenAddress, amount: params.amount },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -513,6 +557,7 @@ export class StellarService {
     metadataUri: string
     feePayment: string
   }): Promise<string> {
+    const functionName = 'setMetadata'
     try {
       const contractId = STELLAR_CONFIG.factoryContractId
       if (!contractId) throw new Error('Factory contract ID is not configured')
@@ -528,7 +573,7 @@ export class StellarService {
           contract.call(
             'set_metadata',
             new Address(params.tokenAddress).toScVal(), // token_address
-            new Address(sourceAddress).toScVal(),        // admin (caller)
+            new Address(sourceAddress).toScVal(), // admin (caller)
             nativeToScVal(params.metadataUri, { type: 'string' }),
             nativeToScVal(BigInt(params.feePayment), { type: 'i128' }),
           ),
@@ -539,6 +584,13 @@ export class StellarService {
       return await simulateAndSubmit(server, tx, this.network)
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { tokenAddress: params.tokenAddress, metadataUri: params.metadataUri },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -550,6 +602,7 @@ export class StellarService {
    * contract and map the response to the local TokenInfo interface.
    */
   async getTokenInfo(index: number): Promise<TokenInfo> {
+    const functionName = 'getTokenInfo'
     const contractId = STELLAR_CONFIG.factoryContractId
     if (!contractId) throw new Error('Factory contract ID is not configured')
 
@@ -579,6 +632,13 @@ export class StellarService {
       }
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { index },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -589,6 +649,7 @@ export class StellarService {
    * Fetch transaction details from the Horizon server using the transaction hash.
    */
   async getTransaction(hash: string): Promise<Record<string, unknown>> {
+    const functionName = 'getTransaction'
     try {
       return await withRetry(async () => {
         const { horizonUrl } = getNetworkConfig(this.network)
@@ -606,6 +667,11 @@ export class StellarService {
       })
     } catch (err) {
       const appErr = toAppError(err)
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        functionName,
+        params: { hash },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -613,6 +679,7 @@ export class StellarService {
   // ── getFactoryState ─────────────────────────────────────────────────────────
 
   async getFactoryState(): Promise<FactoryState> {
+    const functionName = 'getFactoryState'
     const contractId = STELLAR_CONFIG.factoryContractId
     if (!contractId) throw new Error('Factory contract ID is not configured')
 
@@ -642,6 +709,11 @@ export class StellarService {
       }
     } catch (err) {
       const appErr = toAppError(err)
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId,
+        functionName,
+      })
       throw new Error(appErr.message)
     }
   }
@@ -668,6 +740,7 @@ export class StellarService {
   // ── updateFees ──────────────────────────────────────────────────────────────
 
   async updateFees(params: { baseFee: string; metadataFee: string }): Promise<string> {
+    const functionName = 'updateFees'
     try {
       const contractId = STELLAR_CONFIG.factoryContractId
       if (!contractId) throw new Error('Factory contract ID is not configured')
@@ -680,10 +753,7 @@ export class StellarService {
 
       // Contract expects Option<i128> — wrap each value in Some(i128)
       const someI128 = (v: bigint) =>
-        xdr.ScVal.scvVec([
-          xdr.ScVal.scvSymbol('Some'),
-          nativeToScVal(v, { type: 'i128' }),
-        ])
+        xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('Some'), nativeToScVal(v, { type: 'i128' })])
 
       const tx = (await buildTxBuilder(server, sourceAddress, this.network))
         .addOperation(
@@ -700,6 +770,13 @@ export class StellarService {
       return await simulateAndSubmit(server, tx, this.network)
     } catch (err) {
       const appErr = toAppError(err)
+      const factoryContractId = STELLAR_CONFIG.factoryContractId ?? 'unknown'
+      captureContractError(err instanceof Error ? err : new Error(String(err)), {
+        network: this.network,
+        contractId: factoryContractId,
+        functionName,
+        params: { baseFee: params.baseFee, metadataFee: params.metadataFee },
+      })
       throw new Error(appErr.message)
     }
   }
@@ -732,6 +809,58 @@ export class StellarService {
     return []
   }
 
+  // ── getTokensByCreator ───────────────────────────────────────────────────────
+
+  /**
+   * Fetch all tokens created by a given address by reading factory events.
+   */
+  async getTokensByCreator(creator: string): Promise<TokenInfo[]> {
+    const contractId = STELLAR_CONFIG.factoryContractId
+    if (!contractId) throw new Error('Factory contract ID is not configured')
+
+    const { events } = await this.getContractEvents(contractId, 100)
+    const addresses = events
+      .filter((e) => e.type === 'created' && e.data.creator === creator)
+      .map((e) => e.data.tokenAddress)
+      .filter((addr): addr is string => !!addr)
+
+    const results = await Promise.allSettled(
+      addresses.map((addr) => this.getTokenInfoByAddress(addr)),
+    )
+    return results
+      .filter((r): r is PromiseFulfilledResult<TokenInfo> => r.status === 'fulfilled')
+      .map((r) => r.value)
+  }
+
+  // ── getTokenInfoByAddress ────────────────────────────────────────────────────
+
+  /**
+   * Get token info by contract address (derived from factory events).
+   * Returns a TokenInfo with the address embedded in the creator field if not found.
+   */
+  async getTokenInfoByAddress(tokenAddress: string): Promise<TokenInfo> {
+    const contractId = STELLAR_CONFIG.factoryContractId
+    if (!contractId) throw new Error('Factory contract ID is not configured')
+
+    const { events } = await this.getContractEvents(contractId, 100)
+    const createdEvent = events.find(
+      (e) => e.type === 'created' && e.data.tokenAddress === tokenAddress,
+    )
+    // Most-recent metadata event for this token
+    const metaEvent = events
+      .filter((e) => e.type === 'meta' && e.data.tokenAddress === tokenAddress)
+      .sort((a, b) => b.ledger - a.ledger)[0]
+
+    return {
+      name: createdEvent?.data.name ?? tokenAddress,
+      symbol: createdEvent?.data.symbol ?? '',
+      decimals: 7,
+      creator: createdEvent?.data.creator ?? '',
+      createdAt: createdEvent?.timestamp ?? 0,
+      metadataUri: metaEvent?.data.metadataUri,
+    }
+  }
+
   /**
    * Get all events for a specific token address.
    * Filters factory events to only those related to the given token.
@@ -750,9 +879,7 @@ export class StellarService {
     const result = await this.getContractEvents(contractId, limit, cursor)
 
     // Filter to only events related to this token
-    const tokenEvents = result.events.filter(
-      (event) => event.data.tokenAddress === tokenAddress,
-    )
+    const tokenEvents = result.events.filter((event) => event.data.tokenAddress === tokenAddress)
 
     return {
       events: tokenEvents,

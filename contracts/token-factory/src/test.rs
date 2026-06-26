@@ -9,6 +9,10 @@ use soroban_sdk::{
 
 // ── Test setup helper ─────────────────────────────────────────────────────────
 
+fn dummy_hash(env: &Env) -> BytesN<32> {
+    BytesN::from_array(env, &[0u8; 32])
+}
+
 struct Setup {
     env: Env,
     client: TokenFactoryClient<'static>,
@@ -25,8 +29,7 @@ impl Setup {
         let contract_id = env.register_contract(None, TokenFactory);
         // SAFETY: the client borrows `env` which lives for the duration of the test.
         let client = TokenFactoryClient::new(&env, &contract_id);
-        let client: TokenFactoryClient<'static> =
-            unsafe { core::mem::transmute(client) };
+        let client: TokenFactoryClient<'static> = unsafe { core::mem::transmute(client) };
 
         let admin = Address::generate(&env);
         let treasury = Address::generate(&env);
@@ -34,9 +37,22 @@ impl Setup {
             .register_stellar_asset_contract_v2(admin.clone())
             .address();
 
-        client.initialize(&admin, &treasury, &fee_token, dummy_hash(), &1_000, &500);
+        client.initialize(
+            &admin,
+            &treasury,
+            &fee_token,
+            &dummy_hash(&env),
+            &1_000,
+            &500,
+        );
 
-        Setup { env, client, admin, treasury, fee_token }
+        Setup {
+            env,
+            client,
+            admin,
+            treasury,
+            fee_token,
+        }
     }
 
     /// Mint `amount` of the fee token to `recipient`.
@@ -65,7 +81,12 @@ impl Setup {
 
 /// Register a token in factory storage as if `create_token` had run.
 /// Returns the token contract address.
-fn seed_token(s: &Setup, creator: &Address, burn_enabled: bool, max_supply: Option<i128>) -> Address {
+fn seed_token(
+    s: &Setup,
+    creator: &Address,
+    burn_enabled: bool,
+    max_supply: Option<i128>,
+) -> Address {
     let token_addr = s.new_token(creator);
     let info = TokenInfo {
         name: String::from_str(&s.env, "T"),
@@ -77,27 +98,34 @@ fn seed_token(s: &Setup, creator: &Address, burn_enabled: bool, max_supply: Opti
         max_supply,
     };
     s.env.as_contract(&s.client.address, || {
-        let mut state: FactoryState = s.env.storage().instance()
-            .get(&DataKey::State)
-            .unwrap();
+        let mut state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
         state.token_count = state.token_count.checked_add(1).unwrap();
         let index = state.token_count;
-        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env
+            .storage()
+            .instance()
+            .set(&DataKey::TokenInfo(index), &info);
         s.env.storage().instance().set(&DataKey::State, &state);
-        s.env.storage().instance()
+        s.env
+            .storage()
+            .instance()
             .set(&DataKey::TokenIndex(token_addr.clone()), &index);
-        s.env.storage().instance()
-            .set(&DataKey::CreatorTokens(creator.clone()), {
-                let key = DataKey::CreatorTokens(creator.clone());
-                let mut list: soroban_sdk::Vec<u32> = s.env.storage().instance()
-                    .get(&key)
-                    .unwrap_or_else(|| soroban_sdk::vec![&s.env]);
-                list.push_back(index);
-                list
-            });
-        s.env.storage().instance()
+        let creator_key = DataKey::CreatorTokens(creator.clone());
+        let mut list: soroban_sdk::Vec<u32> = s
+            .env
+            .storage()
+            .instance()
+            .get(&creator_key)
+            .unwrap_or_else(|| soroban_sdk::vec![&s.env]);
+        list.push_back(index);
+        s.env.storage().instance().set(&creator_key, &list);
+        s.env
+            .storage()
+            .instance()
             .set(&(&token_addr, symbol_short!("owner")), creator);
-        s.env.storage().instance()
+        s.env
+            .storage()
+            .instance()
             .set(&(&token_addr, symbol_short!("idx")), &index);
     });
     token_addr
@@ -121,7 +149,14 @@ fn test_initialize() {
 #[test]
 fn test_initialize_already_initialized() {
     let s = Setup::new();
-    let result = s.client.try_initialize(&s.admin, &s.treasury, &s.fee_token, &1_000, &500);
+    let result = s.client.try_initialize(
+        &s.admin,
+        &s.treasury,
+        &s.fee_token,
+        &s.dummy_hash(),
+        &1_000,
+        &500,
+    );
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
@@ -133,27 +168,32 @@ fn test_set_metadata_fee_goes_to_treasury() {
     let admin = Address::generate(&s.env);
     s.fund(&admin, 500);
 
-    let token_addr = seed_token_with_burn(&s, &admin, true);
+    let token_addr = seed_token(&s, &admin, true, None);
     s.client.set_metadata(
-        &token_addr, &admin,
+        &token_addr,
+        &admin,
         &String::from_str(&s.env, "ipfs://Qm123"),
         &500,
     );
 
-    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 500);
+    assert_eq!(
+        TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury),
+        500
+    );
 }
-
-// ── create_token (error paths only — deploy needs wasm) ──────────────────────
 
 #[test]
 fn test_create_token_insufficient_fee() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "MyToken"),
         &String::from_str(&s.env, "MTK"),
-        &7, &0_u128, &999,
+        &7,
+        &0_u128,
+        &999,
     );
 
     assert_eq!(result, Err(Ok(Error::InsufficientFee)));
@@ -165,10 +205,13 @@ fn test_create_token_blocked_when_paused() {
     s.client.pause(&s.admin);
     let creator = Address::generate(&s.env);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0_u128, &1_000,
+        &7,
+        &0_u128,
+        &1_000,
     );
     assert_eq!(result, Err(Ok(Error::ContractPaused)));
 }
@@ -179,12 +222,32 @@ fn test_create_token_invalid_decimals() {
     let creator = Address::generate(&s.env);
     s.fund(&creator, 1_000);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "MyToken"),
         &String::from_str(&s.env, "MTK"),
-        &19, &0_u128, &1_000,
+        &19,
+        &0_u128,
+        &1_000,
     );
-    assert_eq!(result, Err(Ok(Error::InvalidDecimals)));
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+}
+
+#[test]
+fn test_create_token_invalid_decimals_large() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 1_000);
+    let result = s.client.try_create_token(
+        &creator,
+        &s.salt(0),
+        &String::from_str(&s.env, "MyToken"),
+        &String::from_str(&s.env, "MTK"),
+        &255,
+        &0_u128,
+        &1_000,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
 }
 
 #[test]
@@ -193,10 +256,13 @@ fn test_create_token_invalid_name_empty() {
     let creator = Address::generate(&s.env);
     s.fund(&creator, 1_000);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0), &s.dummy_hash(),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, ""),
         &String::from_str(&s.env, "MTK"),
-        &7, &0_u128, &1_000,
+        &7,
+        &0_u128,
+        &1_000,
     );
     assert_eq!(result, Err(Ok(Error::InvalidTokenParams)));
 }
@@ -207,10 +273,13 @@ fn test_create_token_invalid_symbol_empty() {
     let creator = Address::generate(&s.env);
     s.fund(&creator, 1_000);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0), &s.dummy_hash(),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "MyToken"),
         &String::from_str(&s.env, ""),
-        &7, &0_u128, &1_000,
+        &7,
+        &0_u128,
+        &1_000,
     );
     assert_eq!(result, Err(Ok(Error::InvalidTokenParams)));
 }
@@ -220,16 +289,18 @@ fn test_create_token_reentrancy_guard() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
     s.env.as_contract(&s.client.address, || {
-        let mut state: FactoryState = s.env.storage().instance()
-            .get(&DataKey::State).unwrap();
+        let mut state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
         state.locked = true;
         s.env.storage().instance().set(&DataKey::State, &state);
     });
     let result = s.client.try_create_token(
-        &creator, &s.salt(0), &s.dummy_hash(),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0_u128, &1_000,
+        &7,
+        &0_u128,
+        &1_000,
     );
     assert_eq!(result, Err(Ok(Error::Reentrancy)));
 }
@@ -238,18 +309,20 @@ fn test_create_token_reentrancy_guard() {
 fn test_create_token_overflow_protection() {
     let s = Setup::new();
     s.env.as_contract(&s.client.address, || {
-        let mut state: FactoryState = s.env.storage().instance()
-            .get(&DataKey::State).unwrap();
+        let mut state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
         state.token_count = u32::MAX;
         s.env.storage().instance().set(&DataKey::State, &state);
     });
     let creator = Address::generate(&s.env);
     s.fund(&creator, 1_000);
     let result = s.client.try_create_token(
-        &creator, &s.salt(0), &s.dummy_hash(),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0_u128, &1_000,
+        &7,
+        &0_u128,
+        &1_000,
     );
     assert_eq!(result, Err(Ok(Error::ArithmeticOverflow)));
 }
@@ -260,14 +333,16 @@ fn test_reentrancy_lock_released_after_error() {
     let creator = Address::generate(&s.env);
     // Trigger InsufficientFee — lock must be released afterwards.
     let _ = s.client.try_create_token(
-        &creator, &s.salt(0), &s.dummy_hash(),
+        &creator,
+        &s.salt(0),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0_u128, &1,
+        &7,
+        &0_u128,
+        &1,
     );
     s.env.as_contract(&s.client.address, || {
-        let state: FactoryState = s.env.storage().instance()
-            .get(&DataKey::State).unwrap();
+        let state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
         assert!(!state.locked, "lock must be released after an error");
     });
 }
@@ -281,11 +356,15 @@ fn test_set_metadata() {
     s.fund(&admin, 500);
     let token_addr = seed_token(&s, &admin, true, None);
     s.client.set_metadata(
-        &token_addr, &admin,
+        &token_addr,
+        &admin,
         &String::from_str(&s.env, "ipfs://QmTest"),
         &500,
     );
-    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 500);
+    assert_eq!(
+        TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury),
+        500
+    );
 }
 
 #[test]
@@ -294,7 +373,8 @@ fn test_set_metadata_insufficient_fee() {
     let admin = Address::generate(&s.env);
     let token_addr = s.new_token(&admin);
     let result = s.client.try_set_metadata(
-        &token_addr, &admin,
+        &token_addr,
+        &admin,
         &String::from_str(&s.env, "ipfs://QmTest"),
         &100,
     );
@@ -309,7 +389,8 @@ fn test_set_metadata_unauthorized() {
     s.fund(&stranger, 500);
     let token_addr = seed_token(&s, &creator, true, None);
     let result = s.client.try_set_metadata(
-        &token_addr, &stranger,
+        &token_addr,
+        &stranger,
         &String::from_str(&s.env, "ipfs://QmTest"),
         &500,
     );
@@ -323,12 +404,14 @@ fn test_set_metadata_already_set() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, None);
     s.client.set_metadata(
-        &token_addr, &admin,
+        &token_addr,
+        &admin,
         &String::from_str(&s.env, "ipfs://QmFirst"),
         &500,
     );
     let result = s.client.try_set_metadata(
-        &token_addr, &admin,
+        &token_addr,
+        &admin,
         &String::from_str(&s.env, "ipfs://QmSecond"),
         &500,
     );
@@ -340,10 +423,20 @@ fn test_set_metadata_different_tokens_independent() {
     let s = Setup::new();
     let admin = Address::generate(&s.env);
     s.fund(&admin, 1_000);
-    let token_a = seed_token_with_burn(&s, &admin, true);
-    let token_b = seed_token_with_burn(&s, &admin, true);
-    s.client.set_metadata(&token_a, &admin, &String::from_str(&s.env, "ipfs://QmA"), &500);
-    s.client.set_metadata(&token_b, &admin, &String::from_str(&s.env, "ipfs://QmB"), &500);
+    let token_a = seed_token(&s, &admin, true, None);
+    let token_b = seed_token(&s, &admin, true, None);
+    s.client.set_metadata(
+        &token_a,
+        &admin,
+        &String::from_str(&s.env, "ipfs://QmA"),
+        &500,
+    );
+    s.client.set_metadata(
+        &token_b,
+        &admin,
+        &String::from_str(&s.env, "ipfs://QmB"),
+        &500,
+    );
 }
 
 // ── mint_tokens ───────────────────────────────────────────────────────────────
@@ -355,8 +448,12 @@ fn test_mint_tokens() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, None);
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &5_000, &1_000);
-    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 5_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &5_000, &1_000);
+    assert_eq!(
+        TokenClient::new(&s.env, &token_addr).balance(&recipient),
+        5_000
+    );
 }
 
 #[test]
@@ -367,9 +464,9 @@ fn test_mint_tokens_unauthorized() {
     s.fund(&stranger, 1_000);
     let token_addr = seed_token(&s, &creator, true, None);
     let recipient = Address::generate(&s.env);
-    let result = s.client.try_mint_tokens(
-        &token_addr, &stranger, &recipient, &5_000, &1_000,
-    );
+    let result = s
+        .client
+        .try_mint_tokens(&token_addr, &stranger, &recipient, &5_000, &1_000);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }
 
@@ -380,9 +477,9 @@ fn test_mint_tokens_insufficient_fee() {
     s.fund(&admin, 500);
     let token_addr = seed_token(&s, &admin, true, None);
     let recipient = Address::generate(&s.env);
-    let result = s.client.try_mint_tokens(
-        &token_addr, &admin, &recipient, &100, &999,
-    );
+    let result = s
+        .client
+        .try_mint_tokens(&token_addr, &admin, &recipient, &100, &999);
     assert_eq!(result, Err(Ok(Error::InsufficientFee)));
 }
 
@@ -393,9 +490,9 @@ fn test_mint_tokens_zero_amount_rejected() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, None);
     let recipient = Address::generate(&s.env);
-    let result = s.client.try_mint_tokens(
-        &token_addr, &admin, &recipient, &0, &1_000,
-    );
+    let result = s
+        .client
+        .try_mint_tokens(&token_addr, &admin, &recipient, &0, &1_000);
     assert_eq!(result, Err(Ok(Error::InvalidParameters)));
 }
 
@@ -408,8 +505,12 @@ fn test_mint_tokens_within_cap() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, Some(1_000));
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &1_000, &1_000);
-    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &1_000, &1_000);
+    assert_eq!(
+        TokenClient::new(&s.env, &token_addr).balance(&recipient),
+        1_000
+    );
 }
 
 #[test]
@@ -419,9 +520,9 @@ fn test_mint_tokens_exceeds_cap() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, Some(500));
     let recipient = Address::generate(&s.env);
-    let result = s.client.try_mint_tokens(
-        &token_addr, &admin, &recipient, &501, &1_000,
-    );
+    let result = s
+        .client
+        .try_mint_tokens(&token_addr, &admin, &recipient, &501, &1_000);
     assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
 }
 
@@ -432,9 +533,14 @@ fn test_mint_tokens_exactly_at_cap() {
     s.fund(&admin, 2_000);
     let token_addr = seed_token(&s, &admin, true, Some(1_000));
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &400, &1_000);
-    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &400, &1_000);
+    assert_eq!(
+        TokenClient::new(&s.env, &token_addr).balance(&recipient),
+        1_000
+    );
 }
 
 #[test]
@@ -444,10 +550,11 @@ fn test_mint_tokens_one_over_cap() {
     s.fund(&admin, 2_000);
     let token_addr = seed_token(&s, &admin, true, Some(1_000));
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
-    let result = s.client.try_mint_tokens(
-        &token_addr, &admin, &recipient, &401, &1_000,
-    );
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    let result = s
+        .client
+        .try_mint_tokens(&token_addr, &admin, &recipient, &401, &1_000);
     assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
 }
 
@@ -508,7 +615,7 @@ fn test_burn_disabled() {
     StellarAssetClient::new(&s.env, &token_addr).mint(&burner, &100);
     assert_eq!(
         s.client.try_burn(&token_addr, &burner, &100),
-        Err(Ok(Error::BurnNotEnabled))
+        Err(Ok(Error::Unauthorized))
     );
 }
 
@@ -523,7 +630,7 @@ fn test_set_burn_enabled_disables_then_reenables() {
     s.client.set_burn_enabled(&token_addr, &creator, &false);
     assert_eq!(
         s.client.try_burn(&token_addr, &burner, &100),
-        Err(Ok(Error::BurnNotEnabled))
+        Err(Ok(Error::Unauthorized))
     );
 
     s.client.set_burn_enabled(&token_addr, &creator, &true);
@@ -538,7 +645,8 @@ fn test_set_burn_enabled_unauthorized() {
     let stranger = Address::generate(&s.env);
     let token_addr = seed_token(&s, &creator, true, None);
     assert_eq!(
-        s.client.try_set_burn_enabled(&token_addr, &stranger, &false),
+        s.client
+            .try_set_burn_enabled(&token_addr, &stranger, &false),
         Err(Ok(Error::Unauthorized))
     );
 }
@@ -548,7 +656,8 @@ fn test_set_burn_enabled_unauthorized() {
 #[test]
 fn test_update_fees() {
     let s = Setup::new();
-    s.client.update_fees(&s.admin, &Some(2_000_i128), &Some(1_000_i128));
+    s.client
+        .update_fees(&s.admin, &Some(2_000_i128), &Some(1_000_i128));
     let state = s.client.get_state();
     assert_eq!(state.base_fee, 2_000);
     assert_eq!(state.metadata_fee, 1_000);
@@ -568,7 +677,8 @@ fn test_update_fees_unauthorized() {
     let s = Setup::new();
     let stranger = Address::generate(&s.env);
     assert_eq!(
-        s.client.try_update_fees(&stranger, &Some(2_000_i128), &None),
+        s.client
+            .try_update_fees(&stranger, &Some(2_000_i128), &None),
         Err(Ok(Error::Unauthorized))
     );
 }
@@ -662,7 +772,10 @@ fn test_get_token_info() {
         max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&DataKey::TokenInfo(1), &info);
+        s.env
+            .storage()
+            .instance()
+            .set(&DataKey::TokenInfo(1), &info);
     });
     let result = s.client.get_token_info(&1);
     assert_eq!(result.name, String::from_str(&s.env, "MyToken"));
@@ -674,7 +787,10 @@ fn test_get_token_info() {
 #[test]
 fn test_get_token_info_not_found() {
     let s = Setup::new();
-    assert_eq!(s.client.try_get_token_info(&99), Err(Ok(Error::TokenNotFound)));
+    assert_eq!(
+        s.client.try_get_token_info(&99),
+        Err(Ok(Error::TokenNotFound))
+    );
 }
 
 #[test]
@@ -704,11 +820,24 @@ fn test_ttl_extended_after_initialize() {
     let client = TokenFactoryClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     let treasury = Address::generate(&env);
-    let fee_token = env.register_stellar_asset_contract_v2(admin.clone()).address();
-    client.initialize(&admin, &treasury, &fee_token, &1_000, &500);
+    let fee_token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    client.initialize(
+        &admin,
+        &treasury,
+        &fee_token,
+        &BytesN::from_array(&env, &[0u8; 32]),
+        &1_000,
+        &500,
+    );
     env.as_contract(&contract_id, || {
+        use soroban_sdk::testutils::storage::Instance;
         let ttl = env.storage().instance().get_ttl();
-        assert!(ttl >= MIN_TTL, "TTL after initialize ({ttl}) must be >= MIN_TTL ({MIN_TTL})");
+        assert!(
+            ttl >= MIN_TTL,
+            "TTL after initialize ({ttl}) must be >= MIN_TTL ({MIN_TTL})"
+        );
     });
 }
 
@@ -776,10 +905,17 @@ fn test_fee_distributed_according_to_split() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, None);
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &100, &1_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &100, &1_000);
 
-    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 700);
-    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&referral), 300);
+    assert_eq!(
+        TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury),
+        700
+    );
+    assert_eq!(
+        TokenClient::new(&s.env, &s.fee_token).balance(&referral),
+        300
+    );
 }
 
 #[test]
@@ -789,8 +925,12 @@ fn test_fee_goes_to_treasury_when_no_split() {
     s.fund(&admin, 1_000);
     let token_addr = seed_token(&s, &admin, true, None);
     let recipient = Address::generate(&s.env);
-    s.client.mint_tokens(&token_addr, &admin, &recipient, &100, &1_000);
-    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 1_000);
+    s.client
+        .mint_tokens(&token_addr, &admin, &recipient, &100, &1_000);
+    assert_eq!(
+        TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury),
+        1_000
+    );
 }
 
 // ── batch token creation ──────────────────────────────────────────────────────
@@ -808,7 +948,9 @@ fn batch_param(s: &Setup, n: u8, name: &str, symbol: &str) -> BatchTokenParams {
 
 fn batch_vec(s: &Setup, params: &[BatchTokenParams]) -> soroban_sdk::Vec<BatchTokenParams> {
     let mut v = soroban_sdk::vec![&s.env];
-    for p in params { v.push_back(p.clone()); }
+    for p in params {
+        v.push_back(p.clone());
+    }
     v
 }
 
@@ -816,9 +958,10 @@ fn batch_vec(s: &Setup, params: &[BatchTokenParams]) -> soroban_sdk::Vec<BatchTo
 fn test_batch_empty_rejected() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
-    let result = s.client.try_create_tokens_batch(
-        &creator, &soroban_sdk::vec![&s.env], &0,
-    );
+    let result = s
+        .client
+        .try_create_tokens_batch(&creator, &soroban_sdk::vec![&s.env], &0);
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
 }
 
 #[test]
@@ -826,10 +969,13 @@ fn test_batch_insufficient_fee_rejected() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
     s.fund(&creator, 500);
-    let params = batch_vec(&s, &[
-        batch_param(&s, 1, "TokenA", "TKA"),
-        batch_param(&s, 2, "TokenB", "TKB"),
-    ]);
+    let params = batch_vec(
+        &s,
+        &[
+            batch_param(&s, 1, "TokenA", "TKA"),
+            batch_param(&s, 2, "TokenB", "TKB"),
+        ],
+    );
     // base_fee=1_000 × 2 = 2_000; paying 1_999
     let result = s.client.try_create_tokens_batch(&creator, &params, &1_999);
     assert_eq!(result, Err(Ok(Error::InsufficientFee)));
@@ -865,8 +1011,7 @@ fn test_batch_reentrancy_guard() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
     s.env.as_contract(&s.client.address, || {
-        let mut state: FactoryState = s.env.storage().instance()
-            .get(&DataKey::State).unwrap();
+        let mut state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
         state.locked = true;
         s.env.storage().instance().set(&DataKey::State, &state);
     });
@@ -888,4 +1033,80 @@ fn test_upgrade_unauthorized() {
         s.client.try_upgrade(&stranger, &new_hash),
         Err(Ok(Error::Unauthorized))
     );
+}
+
+// ── migrate / schema versioning ───────────────────────────────────────────────
+
+#[test]
+fn test_initialize_sets_schema_version() {
+    let s = Setup::new();
+    assert_eq!(s.client.get_state().schema_version, CURRENT_SCHEMA_VERSION);
+    // Standalone "sv" key must also be set
+    s.env.as_contract(&s.client.address, || {
+        let sv: u32 = s
+            .env
+            .storage()
+            .instance()
+            .get(&symbol_short!("sv"))
+            .unwrap();
+        assert_eq!(sv, CURRENT_SCHEMA_VERSION);
+    });
+}
+
+#[test]
+fn test_migrate_is_idempotent() {
+    let s = Setup::new();
+    // Calling migrate twice must not corrupt state or change the version
+    s.client.migrate(&s.admin);
+    s.client.migrate(&s.admin);
+    assert_eq!(s.client.get_state().schema_version, CURRENT_SCHEMA_VERSION);
+}
+
+#[test]
+fn test_migrate_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    assert_eq!(
+        s.client.try_migrate(&stranger),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_migrate_upgrades_pre_versioned_state() {
+    let s = Setup::new();
+
+    // Simulate a pre-versioned deployment: set sv = 0 and schema_version = 0
+    s.env.as_contract(&s.client.address, || {
+        let mut state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
+        state.schema_version = 0;
+        s.env.storage().instance().set(&DataKey::State, &state);
+        s.env.storage().instance().set(&symbol_short!("sv"), &0u32);
+    });
+
+    s.client.migrate(&s.admin);
+
+    assert_eq!(s.client.get_state().schema_version, 1);
+    s.env.as_contract(&s.client.address, || {
+        let sv: u32 = s
+            .env
+            .storage()
+            .instance()
+            .get(&symbol_short!("sv"))
+            .unwrap();
+        assert_eq!(sv, 1);
+    });
+}
+
+#[test]
+fn test_migrate_preserves_state_fields() {
+    let s = Setup::new();
+    s.client.migrate(&s.admin);
+    let state = s.client.get_state();
+    // Core fields must survive migration unchanged
+    assert_eq!(state.admin, s.admin);
+    assert_eq!(state.treasury, s.treasury);
+    assert_eq!(state.base_fee, 1_000);
+    assert_eq!(state.metadata_fee, 500);
+    assert!(!state.paused);
 }

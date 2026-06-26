@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useStellarContext } from '../context/StellarContext'
 import { useNetwork } from '../context/NetworkContext'
 import { formatAddress, formatTimestamp } from '../utils/formatting'
@@ -16,58 +16,67 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
   const [events, setEvents] = useState<ContractEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [cursor, setCursor] = useState<string | null>(null)
+  // Held in a ref (not state) so loadEvents can read the latest cursor without
+  // listing it as a dependency — the cursor isn't rendered directly.
+  const cursorRef = useRef<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadEvents = async (isLoadMore = false) => {
-    try {
-      if (isLoadMore) {
-        setLoadingMore(true)
-      } else {
-        setLoading(true)
+  const loadEvents = useCallback(
+    async (isLoadMore = false) => {
+      try {
+        if (isLoadMore) {
+          setLoadingMore(true)
+        } else {
+          setLoading(true)
+        }
+        setError(null)
+
+        const result = await stellarService.getTokenEvents(
+          tokenAddress,
+          20,
+          isLoadMore ? (cursorRef.current ?? undefined) : undefined,
+        )
+
+        if (isLoadMore) {
+          setEvents((prev) => [...prev, ...result.events])
+        } else {
+          setEvents(result.events)
+        }
+
+        cursorRef.current = result.cursor
+        setHasMore(result.cursor !== null && result.events.length > 0)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load event history')
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
       }
-      setError(null)
-
-      const result = await stellarService.getTokenEvents(
-        tokenAddress,
-        20,
-        isLoadMore ? cursor ?? undefined : undefined,
-      )
-
-      if (isLoadMore) {
-        setEvents((prev) => [...prev, ...result.events])
-      } else {
-        setEvents(result.events)
-      }
-
-      setCursor(result.cursor)
-      setHasMore(result.cursor !== null && result.events.length > 0)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load event history')
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }
+    },
+    [stellarService, tokenAddress],
+  )
 
   useEffect(() => {
+    cursorRef.current = null
     loadEvents()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenAddress])
+  }, [loadEvents])
 
   const getEventIcon = (type: string) => {
     switch (type) {
-      case 'token_created':
+      case 'created':
         return '🎉'
-      case 'tokens_minted':
+      case 'mint':
         return '➕'
-      case 'tokens_burned':
+      case 'burn':
         return '🔥'
-      case 'metadata_set':
+      case 'meta':
         return '📝'
-      case 'fees_updated':
+      case 'fees':
         return '💰'
+      case 'pause':
+        return '⏸️'
+      case 'unpause':
+        return '▶️'
       default:
         return '📋'
     }
@@ -75,16 +84,20 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
 
   const getEventLabel = (type: string) => {
     switch (type) {
-      case 'token_created':
+      case 'created':
         return 'Token Created'
-      case 'tokens_minted':
+      case 'mint':
         return 'Tokens Minted'
-      case 'tokens_burned':
+      case 'burn':
         return 'Tokens Burned'
-      case 'metadata_set':
+      case 'meta':
         return 'Metadata Set'
-      case 'fees_updated':
+      case 'fees':
         return 'Fees Updated'
+      case 'pause':
+        return 'Contract Paused'
+      case 'unpause':
+        return 'Contract Unpaused'
       default:
         return type
     }
@@ -94,7 +107,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
     const { type, data } = event
 
     switch (type) {
-      case 'token_created':
+      case 'created':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -110,7 +123,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'tokens_minted':
+      case 'mint':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -132,7 +145,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'tokens_burned':
+      case 'burn':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -154,7 +167,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'metadata_set':
+      case 'meta':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -166,7 +179,7 @@ export const TokenHistory: React.FC<TokenHistoryProps> = ({ tokenAddress }) => {
           </div>
         )
 
-      case 'fees_updated':
+      case 'fees':
         return (
           <div className="space-y-1">
             <div className="flex items-center gap-2">

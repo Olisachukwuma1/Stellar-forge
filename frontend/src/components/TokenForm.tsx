@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input } from './UI/Input'
 import { Button } from './UI/Button'
@@ -6,7 +6,9 @@ import { useToast } from '../context/ToastContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useNetwork } from '../context/NetworkContext'
 import { validateTokenParams } from '../utils/validation'
-import { formatXLM } from '../utils/formatting'
+import { formatXLM, stroopsToXLM } from '../utils/formatting'
+import { useFactoryState } from '../hooks/useFactoryState'
+import { logger } from '../utils/logger'
 
 interface TokenFormProps {
   onSubmit: (params: {
@@ -16,6 +18,7 @@ interface TokenFormProps {
     initialSupply: string
   }) => Promise<void>
   isLoading?: boolean
+  /** Override the fee shown in the preview (stroops). Falls back to on-chain base_fee. */
   estimatedFee?: string
 }
 
@@ -29,12 +32,20 @@ interface FormErrors {
 export const TokenForm: React.FC<TokenFormProps> = ({
   onSubmit,
   isLoading = false,
-  estimatedFee = '0.01',
+  estimatedFee,
 }) => {
   const { t } = useTranslation()
   const { addToast } = useToast()
   const { wallet } = useWalletContext()
   const { network } = useNetwork()
+  const { state: factoryState } = useFactoryState()
+
+  // Resolve fee: prop override → on-chain base_fee → fallback 0
+  const feeXLM = estimatedFee
+    ? stroopsToXLM(estimatedFee)
+    : factoryState?.baseFee
+      ? stroopsToXLM(factoryState.baseFee)
+      : 0
 
   const [formData, setFormData] = useState({
     name: '',
@@ -108,11 +119,8 @@ export const TokenForm: React.FC<TokenFormProps> = ({
     try {
       await onSubmit(formData)
     } catch (error) {
-      console.error('Form submission error:', error)
-      addToast(
-        error instanceof Error ? error.message : t('tokenForm.submitError'),
-        'error',
-      )
+      logger.error('Form submission error:', error)
+      addToast(error instanceof Error ? error.message : t('tokenForm.submitError'), 'error')
     }
   }
 
@@ -182,9 +190,7 @@ export const TokenForm: React.FC<TokenFormProps> = ({
             required
           />
           {touched.initialSupply && errors.initialSupply && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-              {errors.initialSupply}
-            </p>
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.initialSupply}</p>
           )}
         </div>
       </div>
@@ -201,7 +207,7 @@ export const TokenForm: React.FC<TokenFormProps> = ({
             </p>
           </div>
           <p className="text-lg font-semibold text-blue-900 dark:text-blue-300">
-            {formatXLM(estimatedFee)} XLM
+            {formatXLM(feeXLM)}
           </p>
         </div>
       </div>
@@ -214,11 +220,7 @@ export const TokenForm: React.FC<TokenFormProps> = ({
       </div>
 
       {/* Submit Button */}
-      <Button
-        type="submit"
-        disabled={!isFormValid() || isLoading}
-        className="w-full"
-      >
+      <Button type="submit" disabled={!isFormValid() || isLoading} className="w-full">
         {isLoading ? t('tokenForm.deploying') : t('tokenForm.deploy')}
       </Button>
 

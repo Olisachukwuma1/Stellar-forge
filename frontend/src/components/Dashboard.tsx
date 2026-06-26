@@ -1,12 +1,14 @@
-import { useState, useMemo, useCallback, memo } from 'react'
-import type { TokenInfo, SortOrder } from '../types'
+import React, { useState, useMemo, useCallback, memo } from 'react'
+import type { SortOrder } from '../types'
 import { applyFilters } from '../utils/tokenFilters'
 import { useDebounce } from '../hooks/useDebounce'
+import { useTokenDashboard } from '../hooks/useTokenDashboard'
 import { Input } from './UI/Input'
 import { Card } from './UI/Card'
+import { TokenCardSkeleton } from './UI/Skeleton'
 
 interface DashboardProps {
-  tokens?: TokenInfo[]
+  tokens?: never // legacy prop — data is now fetched internally
 }
 
 /**
@@ -19,7 +21,9 @@ interface DashboardProps {
  * Event handlers are wrapped in useCallback so their references stay stable
  * across renders, which is important if they are ever passed to memoized children.
  */
-const Dashboard: React.FC<DashboardProps> = memo(({ tokens }) => {
+const Dashboard: React.FC<DashboardProps> = memo(() => {
+  const { rows, isLoading, refresh } = useTokenDashboard()
+
   const [searchQuery, setSearchQuery] = useState('')
   const [creatorFilter, setCreatorFilter] = useState('')
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
@@ -29,8 +33,8 @@ const Dashboard: React.FC<DashboardProps> = memo(({ tokens }) => {
 
   // Expensive filter + sort — only recomputes when inputs change
   const filteredTokens = useMemo(
-    () => applyFilters(tokens, debouncedSearch, debouncedCreator, sortOrder),
-    [tokens, debouncedSearch, debouncedCreator, sortOrder],
+    () => applyFilters(rows, debouncedSearch, debouncedCreator, sortOrder),
+    [rows, debouncedSearch, debouncedCreator, sortOrder],
   )
 
   const isFilterActive = debouncedSearch !== '' || debouncedCreator !== ''
@@ -67,27 +71,42 @@ const Dashboard: React.FC<DashboardProps> = memo(({ tokens }) => {
           />
         </div>
         <div className="space-y-1 w-full sm:w-auto sm:min-w-[180px]">
-          <label htmlFor="sort-order" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor="sort-order"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Sort order
           </label>
           <select
             id="sort-order"
             value={sortOrder}
             onChange={handleSortChange}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="alphabetical">Alphabetical</option>
           </select>
         </div>
+        <button
+          onClick={refresh}
+          disabled={isLoading}
+          aria-label="Refresh token list"
+          className="self-end px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 min-h-[44px]"
+        >
+          ↺ Refresh
+        </button>
       </div>
 
-      {filteredTokens.length === 0 ? (
+      {isLoading ? (
+        <ul className="space-y-3" aria-busy="true" aria-label="Loading tokens...">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <TokenCardSkeleton key={i} />
+          ))}
+        </ul>
+      ) : filteredTokens.length === 0 ? (
         <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm sm:text-base">
-          {isFilterActive
-            ? 'No tokens match your search.'
-            : 'No tokens have been deployed yet.'}
+          {isFilterActive ? 'No tokens match your search.' : 'No tokens have been deployed yet.'}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -96,10 +115,16 @@ const Dashboard: React.FC<DashboardProps> = memo(({ tokens }) => {
               <Card>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="min-w-0">
-                    <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white break-words">{token.name}</span>
-                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">({token.symbol})</span>
+                    <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white break-words">
+                      {token.name}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                      ({token.symbol})
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Decimals: {token.decimals}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                    Decimals: {token.decimals}
+                  </span>
                 </div>
                 <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 space-y-1">
                   <div>

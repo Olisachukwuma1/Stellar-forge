@@ -366,6 +366,8 @@ npm run build
 
 ⚠️ **Warning**: Mainnet deployment involves real money. Test thoroughly on testnet first!
 
+Before deploying to mainnet, complete the [Mainnet Deployment Checklist](./docs/mainnet-deployment-checklist.md).
+
 The process is identical to testnet, but:
 1. Use `--network mainnet` instead of `--network testnet`
 2. Fund your account with real XLM (buy from an exchange)
@@ -731,7 +733,7 @@ add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https
 
 For users deploying tokens, we strongly recommend:
 - Always test on testnet first before mainnet deployment
-- Review all parameters carefully using the mainnet deployment checklist
+- Review all parameters carefully using the [Mainnet Deployment Checklist](./docs/mainnet-deployment-checklist.md)
 - Verify contract addresses and transaction details before signing
 
 ## Fee Bump Transactions
@@ -776,6 +778,20 @@ Key architectural decisions are documented in [`docs/adr/`](./docs/adr/):
 
 The factory contract supports in-place WASM upgrades without redeploying or migrating state.
 
+### Schema versioning
+
+`FactoryState` carries a `schema_version: u32` field. The constant `CURRENT_SCHEMA_VERSION` in `lib.rs` is the source of truth. `initialize` stamps the current version on every fresh deployment. `migrate` reads the on-chain version from a standalone `"sv"` storage key and applies each pending upgrade step in order, making it safe to call multiple times (idempotent).
+
+| Version | Change |
+|---------|--------|
+| 1 | Initial versioned schema — added `schema_version` field to `FactoryState` |
+
+### Adding a new migration (version N → N+1)
+
+1. Increment `CURRENT_SCHEMA_VERSION` in `lib.rs` to `N+1`.
+2. Add an `if on_chain_version < N+1 { … }` block inside `migrate` that reads the current state, sets new fields to their defaults, writes the updated state, and bumps `on_chain_version`.
+3. Add a test in `test.rs` that seeds `sv = N` and asserts the state is correct after calling `migrate`.
+
 ### How it works
 
 1. Build and optimize the new contract WASM.
@@ -807,7 +823,7 @@ The factory contract supports in-place WASM upgrades without redeploying or migr
      --admin <admin-address>
    ```
 
-Only the admin address can call `upgrade`. Non-admin callers receive `Error::Unauthorized`. Contract state (tokens, fees, admin) is fully preserved across upgrades.
+Only the admin address can call `upgrade` and `migrate`. Non-admin callers receive `Error::Unauthorized`. Contract state (tokens, fees, admin) is fully preserved across upgrades.
 
 ## Code of Conduct
 

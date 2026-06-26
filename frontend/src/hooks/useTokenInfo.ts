@@ -66,7 +66,7 @@ export function useTokenInfo(address: string): UseTokenInfoResult {
       setError(null)
 
       try {
-        const info = await stellarService.getTokenInfo(address)
+        const info = await stellarService.getTokenInfoByAddress(address)
         cache.set(address, { info, fetchedAt: Date.now() })
         setToken(info)
       } catch (err) {

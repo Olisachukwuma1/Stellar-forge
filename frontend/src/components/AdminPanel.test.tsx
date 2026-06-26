@@ -1,3 +1,4 @@
+import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -6,6 +7,8 @@ import { WalletContext } from '../context/WalletContext'
 import { StellarContext } from '../context/StellarContext'
 import { ToastContext } from '../context/ToastContext'
 import type { FactoryState } from '../types'
+import type { TransactionStatus } from '../hooks/useTransaction'
+import type { StellarService } from '../services/stellar'
 
 // Mock hooks
 vi.mock('../hooks/useFactoryState', () => ({
@@ -43,7 +46,7 @@ const renderWithProviders = async (
     isConnected?: boolean
     factoryState?: FactoryState | null
     isLoading?: boolean
-    txStatus?: string
+    txStatus?: TransactionStatus
   } = {},
 ) => {
   const { useFactoryState } = await import('../hooks/useFactoryState')
@@ -58,8 +61,8 @@ const renderWithProviders = async (
 
   vi.mocked(useTransaction).mockReturnValue({
     execute: mockExecute,
-    status: txStatus as any,
-    txHash: null,
+    status: txStatus,
+    result: null,
     error: null,
     reset: vi.fn(),
   })
@@ -71,7 +74,6 @@ const renderWithProviders = async (
           address: walletAddress,
           isConnected,
           balance: '100',
-          network: 'testnet',
         },
         connect: vi.fn(),
         disconnect: vi.fn(),
@@ -84,7 +86,7 @@ const renderWithProviders = async (
         value={{
           stellarService: {
             updateFees: mockUpdateFees,
-          } as any,
+          } as unknown as StellarService,
         }}
       >
         <ToastContext.Provider

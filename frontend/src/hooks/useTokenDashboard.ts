@@ -65,11 +65,11 @@ export function useTokenDashboard(): UseTokenDashboardResult {
           return
         }
 
-        // Step 2: build index→address map from token_created events
+        // Step 2: build index→address map from created events
         const { events } = await stellarService.getContractEvents(contractId, 200)
         const indexToAddress = new Map<number, string>()
         for (const e of events) {
-          if (e.type === 'token_created' && e.data.tokenAddress) {
+          if (e.type === 'created' && e.data.tokenAddress) {
             const idx = e.data.index !== undefined ? Number(e.data.index) : -1
             if (idx >= 0) indexToAddress.set(idx, e.data.tokenAddress)
           }
@@ -77,9 +77,7 @@ export function useTokenDashboard(): UseTokenDashboardResult {
 
         // Step 3: fetch token info for all indices in parallel (1-based)
         const indices = Array.from({ length: count }, (_, i) => i + 1)
-        const results = await Promise.allSettled(
-          indices.map((i) => stellarService.getTokenInfo(i)),
-        )
+        const results = await Promise.allSettled(indices.map((i) => stellarService.getTokenInfo(i)))
 
         // Step 4: assemble rows — client-side filter by creator happens in render
         const rows: TokenRow[] = results

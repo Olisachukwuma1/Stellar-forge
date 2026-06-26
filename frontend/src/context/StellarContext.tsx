@@ -8,7 +8,8 @@ interface StellarContextValue {
   ipfsService: IPFSService
 }
 
-const StellarContext = createContext<StellarContextValue | null>(null)
+// eslint-disable-next-line react-refresh/only-export-components
+export const StellarContext = createContext<StellarContextValue | null>(null)
 
 export function StellarProvider({ children }: { children: ReactNode }) {
   const { network } = useNetwork()

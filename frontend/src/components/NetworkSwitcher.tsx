@@ -1,5 +1,5 @@
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from './UI'
-import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNetwork, type Network } from '../context/NetworkContext'
 
@@ -52,7 +52,7 @@ export const NetworkSwitcher: React.FC = () => {
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={t('networkSwitcher.ariaLabel', { network: networkLabel(network) })}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer select-none transition-colors ${BADGE_COLORS[network]}`}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer select-none transition-colors min-h-[44px] ${BADGE_COLORS[network]}`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${network === 'mainnet' ? 'bg-green-500' : 'bg-yellow-500'}`}

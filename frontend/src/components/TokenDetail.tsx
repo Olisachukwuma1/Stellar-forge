@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useStellarContext } from '../context/StellarContext'
@@ -6,10 +6,11 @@ import { useNetwork } from '../context/NetworkContext'
 import { useToast } from '../context/ToastContext'
 import { useWallet } from '../hooks/useWallet'
 import { ipfsService } from '../services/ipfs'
-import { stellarExplorerUrl, ipfsToGatewayUrl, formatAddress, formatTimestamp } from '../utils/formatting'
+import { ipfsToGatewayUrl, formatAddress, formatTimestamp } from '../utils/formatting'
 import { isValidContractAddress } from '../utils/validation'
 import type { TokenInfo, IPFSMetadata } from '../types'
-import { Card, Button, Spinner } from './UI'
+import { Card, Button } from './UI'
+import { TokenDetailSkeleton } from './UI/Skeleton'
 import { CopyButton } from './CopyButton'
 import { ExplorerLink } from './ExplorerLink'
 import { QRCodeModal } from './UI/QRCodeModal'
@@ -18,6 +19,7 @@ import { MintForm } from './MintForm'
 import { BurnForm } from './BurnForm'
 import { SetMetadataForm } from './SetMetadataForm'
 import { TokenHistory } from './TokenHistory'
+import { NotFound } from './NotFound'
 
 const BASE_URL = 'https://stellarforge.app'
 
@@ -53,6 +55,7 @@ export const TokenDetail: React.FC = () => {
 
   useEffect(() => {
     if (!address || !isValidContractAddress(address)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- validating the address param before fetching
       setNotFound(true)
       setLoading(false)
       return
@@ -63,7 +66,7 @@ export const TokenDetail: React.FC = () => {
     setError(null)
 
     stellarService
-      .getTokenInfo(address)
+      .getTokenInfoByAddress(address)
       .then(async (info) => {
         setToken(info as TokenInfo)
         if (info.metadataUri) {
@@ -130,50 +133,32 @@ export const TokenDetail: React.FC = () => {
   )
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center py-20" aria-live="polite">
-        <Spinner size="lg" label={t('tokenDetail.loading', { address: formatAddress(address || '') })} />
-      </div>
-    )
+    return <TokenDetailSkeleton />
   }
 
   if (notFound || !token) {
-    return (
-      <div className="text-center py-20 space-y-4" role="alert">
-        <p className="text-2xl font-semibold text-gray-700 dark:text-gray-300">
-          {t('tokenDetail.loadError')}
-        </p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm break-all">
-          No token found at address: <span className="font-mono">{address}</span>
-        </p>
-        <Link to="/tokens">
-          <Button variant="outline" size="sm">Back to Dashboard</Button>
-        </Link>
-      </div>
-    )
+    return <NotFound />
   }
 
   const imageUrl = metadata?.image ? ipfsToGatewayUrl(metadata.image) : null
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {token.name}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white min-w-0">
+          <span className="break-words">{token.name}</span>
           <span className="ml-2 text-base font-normal text-gray-500 dark:text-gray-400">
             ({token.symbol})
           </span>
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {address && (
-            <ShareButton
-              tokenAddress={address}
-              tokenName={token.name}
-              tokenSymbol={token.symbol}
-            />
+            <ShareButton tokenAddress={address} tokenName={token.name} tokenSymbol={token.symbol} />
           )}
           <Link to="/tokens">
-            <Button variant="outline" size="sm">← Back</Button>
+            <Button variant="outline" size="sm">
+              ← Back
+            </Button>
           </Link>
         </div>
       </div>
@@ -182,7 +167,9 @@ export const TokenDetail: React.FC = () => {
         {error && <p className="text-red-500 mb-4">{error}</p>}
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">{t('transactionHistory.dataLabels.token')}</dt>
+            <dt className="text-gray-500 dark:text-gray-400">
+              {t('transactionHistory.dataLabels.token')}
+            </dt>
             <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
               <ExplorerLink
                 type="contract"
@@ -204,7 +191,9 @@ export const TokenDetail: React.FC = () => {
             <dd className="text-gray-900 dark:text-gray-100 mt-1">{token.decimals}</dd>
           </div>
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">{t('transactionHistory.dataLabels.creator')}</dt>
+            <dt className="text-gray-500 dark:text-gray-400">
+              {t('transactionHistory.dataLabels.creator')}
+            </dt>
             <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
               {token.creator ? (
                 <ExplorerLink
@@ -215,7 +204,29 @@ export const TokenDetail: React.FC = () => {
                   ariaLabel={`View account ${token.creator} on Stellar Expert`}
                   className="text-indigo-500 hover:underline"
                 />
-              ) : '—'}
+              ) : (
+                '—'
+              )}
+            </dd>
+          </div>
+          {/* TODO: fetch per-token admin via direct token contract call once a
+              getTokenAdmin(tokenAddress) RPC method is available. For now the
+              token creator and the Soroban token admin are the same at deploy time. */}
+          <div>
+            <dt className="text-gray-500 dark:text-gray-400">Admin</dt>
+            <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
+              {token.creator ? (
+                <ExplorerLink
+                  type="account"
+                  value={token.creator}
+                  network={network}
+                  label={formatAddress(token.creator)}
+                  ariaLabel={`View admin account ${token.creator} on Stellar Expert`}
+                  className="text-indigo-500 hover:underline"
+                />
+              ) : (
+                '—'
+              )}
             </dd>
           </div>
           {token.createdAt ? (
@@ -230,7 +241,9 @@ export const TokenDetail: React.FC = () => {
             <div className="sm:col-span-2">
               <dt className="text-gray-500 dark:text-gray-400">{t('setMetadata.metadataUri')}</dt>
               <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
-                <span className="truncate" title={token.metadataUri}>{token.metadataUri}</span>
+                <span className="truncate" title={token.metadataUri}>
+                  {token.metadataUri}
+                </span>
                 <CopyButton value={token.metadataUri} ariaLabel="Copy metadata URI" />
               </dd>
             </div>
@@ -246,7 +259,9 @@ export const TokenDetail: React.FC = () => {
                 src={imageUrl}
                 alt={`${token.name} token art`}
                 className="w-24 h-24 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).style.display = 'none'
+                }}
               />
             )}
             <div className="space-y-1 text-sm">

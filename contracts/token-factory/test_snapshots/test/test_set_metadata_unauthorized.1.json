@@ -179,72 +179,38 @@
                   "storage": [
                     {
                       "key": {
-                        "u32": 1
+                        "symbol": "sv"
                       },
                       "val": {
-                        "map": [
+                        "u32": 1
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
                           {
-                            "key": {
-                              "symbol": "burn_enabled"
-                            },
-                            "val": {
-                              "bool": true
-                            }
+                            "symbol": "CreatorTokens"
                           },
                           {
-                            "key": {
-                              "symbol": "created_at"
-                            },
-                            "val": {
-                              "u64": "0"
-                            }
-                          },
+                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "vec": [
                           {
-                            "key": {
-                              "symbol": "creator"
-                            },
-                            "val": {
-                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "decimals"
-                            },
-                            "val": {
-                              "u32": 7
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "name"
-                            },
-                            "val": {
-                              "string": "TestToken"
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "symbol"
-                            },
-                            "val": {
-                              "string": "TEST"
-                            }
+                            "u32": 1
                           }
                         ]
                       }
                     },
                     {
                       "key": {
-                        "symbol": "init"
-                      },
-                      "val": {
-                        "bool": true
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "state"
+                        "vec": [
+                          {
+                            "symbol": "State"
+                          }
+                        ]
                       },
                       "val": {
                         "map": [
@@ -298,6 +264,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "schema_version"
+                            },
+                            "val": {
+                              "u32": 1
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "token_count"
                             },
                             "val": {
@@ -306,10 +280,103 @@
                           },
                           {
                             "key": {
+                              "symbol": "token_wasm_hash"
+                            },
+                            "val": {
+                              "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "treasury"
                             },
                             "val": {
                               "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TokenIndex"
+                          },
+                          {
+                            "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 1
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TokenInfo"
+                          },
+                          {
+                            "u32": 1
+                          }
+                        ]
+                      },
+                      "val": {
+                        "map": [
+                          {
+                            "key": {
+                              "symbol": "burn_enabled"
+                            },
+                            "val": {
+                              "bool": true
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "created_at"
+                            },
+                            "val": {
+                              "u64": "0"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "creator"
+                            },
+                            "val": {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "decimals"
+                            },
+                            "val": {
+                              "u32": 7
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "max_supply"
+                            },
+                            "val": "void"
+                          },
+                          {
+                            "key": {
+                              "symbol": "name"
+                            },
+                            "val": {
+                              "string": "T"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "symbol"
+                            },
+                            "val": {
+                              "string": "T"
                             }
                           }
                         ]
@@ -329,6 +396,21 @@
                       "val": {
                         "u32": 1
                       }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
+                          },
+                          {
+                            "symbol": "owner"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                      }
                     }
                   ]
                 }
@@ -337,7 +419,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 4095
+        "live_until": 535000
       },
       {
         "entry": {
@@ -629,7 +711,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 4095
+        "live_until": 535000
       }
     ]
   },

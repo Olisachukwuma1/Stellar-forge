@@ -1,3 +1,4 @@
+import React from 'react'
 import { renderHook } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import { StellarProvider, useStellarContext } from '../context/StellarContext'

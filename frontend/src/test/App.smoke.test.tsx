@@ -1,3 +1,4 @@
+import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
 
 // Mock broken/heavy components so parse errors in their source don't block the test

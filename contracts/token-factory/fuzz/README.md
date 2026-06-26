@@ -4,11 +4,13 @@ This directory contains fuzz testing targets for the token factory contract usin
 
 ## Overview
 
-Fuzz testing generates random inputs to discover edge cases and potential crashes in arithmetic and validation logic. The fuzz targets focus on three critical areas:
+Fuzz testing generates random inputs to discover edge cases and potential crashes in arithmetic and validation logic. The fuzz targets focus on five critical areas:
 
 1. **create_token**: UTF-8 string validation, name/symbol/decimals parsing, fee arithmetic with random inputs
 2. **fee_arithmetic**: Integer overflow checking in fee calculations, saturation arithmetic, boundary conditions
 3. **burn**: Burn amount arithmetic, balance invariants, total supply calculations with random amounts
+4. **set_metadata**: Metadata URI string handling, fee comparison arithmetic, duplicate-set guard
+5. **mint_tokens**: Amount validation, max-supply cap overflow (`checked_add`), fee distribution arithmetic
 
 ## Setup
 
@@ -101,6 +103,43 @@ cargo +nightly run --release --bin fuzz_create_token -- -max_len=10000 -timeout=
 - Saturation arithmetic works correctly
 
 **File**: `fuzz_targets/fuzz_burn.rs`
+
+### fuzz_set_metadata
+
+**Focus**: Metadata URI string handling and fee arithmetic for `set_metadata`
+
+**Tests**:
+- Arbitrary byte sequences converted to UTF-8 metadata URIs (no length limit in contract)
+- Fee sufficiency guard: `fee_payment >= metadata_fee`
+- Fee remainder arithmetic after payment
+- Duplicate-set guard simulation (idempotency path skips arithmetic)
+- Saturating fee-accumulation operations matching `distribute_fee`
+
+**Success Criteria**:
+- No panics on any valid UTF-8 URI or fee combination
+- Non-UTF-8 inputs handled without panic
+- All arithmetic invariants maintained
+
+**File**: `fuzz_targets/fuzz_set_metadata.rs`
+
+### fuzz_mint_tokens
+
+**Focus**: Amount validation, max-supply cap enforcement, and fee distribution for `mint_tokens`
+
+**Tests**:
+- Non-positive amount rejection (`amount <= 0`)
+- Fee sufficiency guard: `fee_payment >= base_fee`
+- `checked_add` overflow on `current_supply + amount` (maps to `ArithmeticOverflow` error)
+- Max-supply cap enforcement: `new_total > cap` (maps to `MaxSupplyExceeded` error)
+- Supply monotonicity: minting always increases total supply
+- Fee split distribution arithmetic (two-recipient model)
+
+**Success Criteria**:
+- No panics on any `i128` amount or supply combination
+- Overflow paths detected via `checked_add`, not via panic
+- Supply invariants (`new_total <= cap`) maintained on success path
+
+**File**: `fuzz_targets/fuzz_mint_tokens.rs`
 
 ## CI Integration
 

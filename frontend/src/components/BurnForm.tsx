@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { Input, Button, ConfirmModal, InsufficientBalanceWarning, Select } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
@@ -47,7 +47,9 @@ export const BurnForm: React.FC<BurnFormProps> = ({
 
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
   const {
@@ -72,10 +74,11 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const selectedToken = myTokens.find((t) => t.address === tokenSelect)
 
   const debouncedAddress = useDebounce(resolvedTokenAddress, 300)
-  const { balance, isLoading: balanceLoading, refresh: refreshBalance } = useTokenBalance(
-    debouncedAddress,
-    wallet.address ?? '',
-  )
+  const {
+    balance,
+    isLoading: balanceLoading,
+    refresh: refreshBalance,
+  } = useTokenBalance(debouncedAddress, wallet.address ?? '')
 
   // Validate amount against balance using BigInt (token amounts can be large)
   const amountExceedsBalance =
@@ -83,7 +86,11 @@ export const BurnForm: React.FC<BurnFormProps> = ({
     !!balance &&
     balance !== '0' &&
     (() => {
-      try { return BigInt(amount) > BigInt(balance) } catch { return false }
+      try {
+        return BigInt(amount) > BigInt(balance)
+      } catch {
+        return false
+      }
     })()
 
   const burnBuilder = useCallback(
@@ -93,10 +100,16 @@ export const BurnForm: React.FC<BurnFormProps> = ({
 
   const { execute: executeBurn, status: txStatus } = useTransaction(burnBuilder)
   const isSubmitting =
-    txStatus === 'simulating' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'polling'
+    txStatus === 'simulating' ||
+    txStatus === 'signing' ||
+    txStatus === 'submitting' ||
+    txStatus === 'polling'
 
   const onValid = () => {
-    if (!wallet.isConnected) { addToast('Connect your wallet first', 'error'); return }
+    if (!wallet.isConnected) {
+      addToast('Connect your wallet first', 'error')
+      return
+    }
     requireTos(() => setPending(true))
   }
 
@@ -125,19 +138,23 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   return (
     <>
       <form onSubmit={handleSubmit(onValid)} className="space-y-4" noValidate>
-
         {/* Danger zone header */}
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3">
           <p className="text-sm font-medium text-red-700 dark:text-red-400 flex items-center gap-2">
             <span aria-hidden="true">🔥</span>
-            Burning tokens is <strong>permanent and irreversible</strong>. Burned tokens cannot be recovered.
+            Burning tokens is <strong>permanent and irreversible</strong>. Burned tokens cannot be
+            recovered.
           </p>
         </div>
 
         {/* Token selector */}
         <Select
           label="Token"
-          options={tokenOptions.length > 1 ? tokenOptions : [{ value: MANUAL_VALUE, label: 'Manual input…' }]}
+          options={
+            tokenOptions.length > 1
+              ? tokenOptions
+              : [{ value: MANUAL_VALUE, label: 'Manual input…' }]
+          }
           error={errors.tokenSelect?.message}
           required
           disabled={!!initialAddress}
@@ -156,16 +173,23 @@ export const BurnForm: React.FC<BurnFormProps> = ({
             error={errors.tokenManual?.message}
             {...register('tokenManual', {
               required: 'Token address is required',
-              validate: (v) => isValidContractAddress(v.trim()) || 'Enter a valid Soroban contract address',
+              validate: (v) =>
+                isValidContractAddress(v.trim()) || 'Enter a valid Soroban contract address',
             })}
           />
         )}
 
         {/* Balance display */}
         {wallet.address && debouncedAddress && (
-          <div className="flex items-center justify-between rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
+          <div
+            className="flex items-center justify-between rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm"
+            data-testid="burn-balance-display"
+          >
             <span className="text-gray-500 dark:text-gray-400">Your balance</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-gray-100">
+            <span
+              className="font-mono font-medium text-gray-900 dark:text-gray-100"
+              data-testid="burn-balance-value"
+            >
               {balanceLoading ? (
                 <span className="animate-pulse text-gray-400">Loading…</span>
               ) : (
@@ -193,8 +217,11 @@ export const BurnForm: React.FC<BurnFormProps> = ({
                 {...register('amount', {
                   required: 'Amount is required',
                   validate: (v) => {
-                    try { return BigInt(v) > 0n || 'Amount must be greater than 0' }
-                    catch { return 'Enter a valid amount' }
+                    try {
+                      return BigInt(v) > 0n || 'Amount must be greater than 0'
+                    } catch {
+                      return 'Enter a valid amount'
+                    }
                   },
                 })}
               />
@@ -206,12 +233,17 @@ export const BurnForm: React.FC<BurnFormProps> = ({
               disabled={!balance || balance === '0' || balanceLoading}
               onClick={() => setValue('amount', balance, { shouldValidate: true })}
               className="mb-0.5 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+              data-testid="burn-max-button"
             >
               Max
             </Button>
           </div>
           {amountExceedsBalance && (
-            <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+            <p
+              className="mt-1 text-xs text-red-600 dark:text-red-400"
+              role="alert"
+              data-testid="burn-exceeds-balance-error"
+            >
               Amount exceeds your balance of {balance}
             </p>
           )}

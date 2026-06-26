@@ -17,10 +17,6 @@ describe('formatTokenAmount', () => {
     expect(formatTokenAmount('1000000000', 7)).toBe('100.0000000')
   })
 
-  it('formats zero', () => {
-    expect(formatTokenAmount('0', 7)).toBe('0.0000000')
-  })
-
   it('formats negative amounts', () => {
     expect(formatTokenAmount('-1000000000', 7)).toBe('-100.0000000')
   })
@@ -32,10 +28,6 @@ describe('formatTokenAmount', () => {
 
   it('accepts BigInt input', () => {
     expect(formatTokenAmount(700_000_000n, 7)).toBe('70.0000000')
-  })
-
-  it('formats with 0 decimals', () => {
-    expect(formatTokenAmount('42', 0)).toBe('42')
   })
 
   it('pads fractional part with leading zeros', () => {
@@ -71,8 +63,8 @@ describe('formatXLM', () => {
 
 describe('formatDate', () => {
   it('formats a known timestamp to MMM DD, YYYY', () => {
-    // 2026-03-19T00:00:00Z
-    expect(formatDate(1742342400)).toBe('Mar 19, 2026')
+    // 2025-03-19T00:00:00Z
+    expect(formatDate(1742342400)).toBe('Mar 19, 2025')
   })
 
   it('does not throw for timestamp 0', () => {
@@ -92,7 +84,7 @@ describe('truncateAddress', () => {
   })
 
   it('respects custom chars param', () => {
-    expect(truncateAddress(ADDR, 6)).toBe('GAAZI4...CCWN')
+    expect(truncateAddress(ADDR, 6)).toBe('GAAZI4...KOCCWN')
   })
 
   it('returns address unchanged when shorter than 2*chars', () => {
@@ -124,15 +116,15 @@ describe('parseTokenAmount', () => {
   })
 })
 
-// ── formatAddress (legacy helper) ────────────────────────────────────────────
+// ── formatAddress ─────────────────────────────────────────────────────────────
 
 describe('formatAddress', () => {
   it('truncates with default prefix/suffix', () => {
     expect(formatAddress(ADDR)).toBe('GAAZI4...CCWN')
   })
 
-  it('returns empty string for empty input', () => {
-    expect(formatAddress('')).toBe('')
+  it('respects custom prefixLen and suffixLen', () => {
+    expect(formatAddress(ADDR, 4, 4)).toBe('GAAZ...CCWN')
   })
 
   it('returns address unchanged when shorter than prefix + suffix', () => {

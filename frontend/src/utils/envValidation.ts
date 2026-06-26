@@ -38,6 +38,12 @@ const ENV_VARS: EnvVar[] = [
     description: 'Pinata IPFS API secret',
     required: true,
   },
+  {
+    key: 'VITE_SENTRY_DSN',
+    value: import.meta.env.VITE_SENTRY_DSN,
+    description: 'Sentry DSN for error tracking (optional - production only)',
+    required: false,
+  },
 ] as const
 
 export interface EnvValidationResult {

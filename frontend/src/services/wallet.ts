@@ -2,9 +2,8 @@ import {
   isConnected,
   getAddress,
   signTransaction as freighterSignTransaction,
-  getNetworkDetails,
 } from '@stellar/freighter-api'
-import { NETWORK_CONFIGS } from '../config/stellar'
+import { NETWORK_CONFIGS, type Network } from '../config/stellar'
 
 interface HorizonBalance {
   asset_type: string
@@ -61,12 +60,7 @@ export class WalletService {
       )
     }
 
-    // Verify the user is on the correct network before connecting
-    await this.assertCorrectNetwork()
-
     try {
-      // Use getAddress as it's the more modern version in @stellar/freighter-api
-      // but fulfills the role of getPublicKey()
       const addressObj = await getAddress()
 
       if (addressObj.error) {
@@ -93,7 +87,7 @@ export class WalletService {
     this.clearAddress()
   }
 
-  async signTransaction(xdr: string, network: 'testnet' | 'mainnet'): Promise<string> {
+  async signTransaction(xdr: string, network: Network): Promise<string> {
     if (!(await this.isInstalled())) {
       throw new Error('Freighter wallet is not installed')
     }
@@ -101,8 +95,6 @@ export class WalletService {
     if (!this.connectedAddress) {
       throw new Error('Wallet not connected. Please connect first.')
     }
-
-    await this.assertCorrectNetwork()
 
     try {
       const networkPassphrase = NETWORK_CONFIGS[network].networkPassphrase
@@ -119,7 +111,6 @@ export class WalletService {
       return signedResult.signedTxXdr
     } catch (error) {
       if (error instanceof Error) {
-        // Check for network mismatch
         if (error.message.includes('network')) {
           throw new Error(`Network mismatch: Please switch Freighter to ${network}`)
         }
@@ -129,7 +120,7 @@ export class WalletService {
     }
   }
 
-  async getBalance(address: string, network: 'testnet' | 'mainnet'): Promise<string> {
+  async getBalance(address: string, network: Network): Promise<string> {
     try {
       const horizonUrl = NETWORK_CONFIGS[network].horizonUrl
 
@@ -137,7 +128,6 @@ export class WalletService {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Account not yet funded on the network
           return '0'
         }
         throw new Error(`Failed to fetch account: ${response.statusText}`)
@@ -145,7 +135,6 @@ export class WalletService {
 
       const accountData: HorizonAccountResponse = await response.json()
 
-      // Find native XLM balance
       const nativeBalance = accountData.balances.find((balance) => balance.asset_type === 'native')
 
       return nativeBalance ? nativeBalance.balance : '0'
@@ -162,7 +151,6 @@ export class WalletService {
       return null
     }
 
-    // First check localStorage for saved address
     const savedAddress = this.getSavedAddress()
     if (!savedAddress) {
       return null
@@ -181,14 +169,13 @@ export class WalletService {
         return null
       }
 
-      // Verify the saved address matches the current Freighter address
       if (addressObj.address !== savedAddress) {
         this.clearAddress()
         this.saveAddress(addressObj.address)
       }
 
       this.connectedAddress = addressObj.address
-      this.persistAddress(addressObj.address)
+      this.saveAddress(addressObj.address)
       return addressObj.address
     } catch {
       this.clearAddress()

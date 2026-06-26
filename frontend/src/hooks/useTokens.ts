@@ -31,20 +31,20 @@ async function fetchAllTokens(creator?: string): Promise<TokenInfo[]> {
     return stellarService.getTokensByCreator(creator)
   }
 
-  // Fetch all: collect unique token addresses from token_created events,
+  // Fetch all: collect unique token addresses from created events,
   // then resolve each in parallel (failed resolutions are silently dropped).
   const { events } = await stellarService.getContractEvents(contractId, 100)
   const addresses = [
     ...new Set(
       events
-        .filter((e) => e.type === 'token_created')
+        .filter((e) => e.type === 'created')
         .map((e) => e.data.tokenAddress)
         .filter((addr): addr is string => !!addr),
     ),
   ]
 
   const results = await Promise.allSettled(
-    addresses.map((addr) => stellarService.getTokenInfo(addr)),
+    addresses.map((addr) => stellarService.getTokenInfoByAddress(addr)),
   )
 
   return results

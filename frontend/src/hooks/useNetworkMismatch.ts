@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getNetworkDetails } from '@stellar/freighter-api'
-import { useNetwork } from '../context/NetworkContext'
 import { STELLAR_CONFIG } from '../config/stellar'
+import type { Network } from '../context/NetworkContext'
 
 export interface NetworkMismatchState {
   /** Network name reported by Freighter (e.g. "TESTNET") */
@@ -14,8 +14,7 @@ export interface NetworkMismatchState {
 
 const POLL_INTERVAL_MS = 5_000
 
-export function useNetworkMismatch(): NetworkMismatchState {
-  const { network } = useNetwork()
+export function useNetworkMismatch(network: Network): NetworkMismatchState {
   const [freighterNetwork, setFreighterNetwork] = useState<string | null>(null)
   const [isMismatch, setIsMismatch] = useState(false)
 
@@ -39,6 +38,7 @@ export function useNetworkMismatch(): NetworkMismatchState {
   }, [network])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial check, then poll on an interval
     check()
     const id = setInterval(check, POLL_INTERVAL_MS)
     return () => clearInterval(id)

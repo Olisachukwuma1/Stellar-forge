@@ -1,92 +1,74 @@
 import { renderHook, act } from '@testing-library/react'
-import { describe, test, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
+import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { useTransaction } from './useTransaction'
-import { stellarService } from '../services/stellar'
-
-vi.mock('../services/stellar', () => ({
-  stellarService: { getTransaction: vi.fn() },
-}))
 
 describe('useTransaction', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
     vi.clearAllMocks()
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  test('returns idle when no hash provided', () => {
-    const { result } = renderHook(() => useTransaction(null))
+  test('starts in idle state', () => {
+    const builder = vi.fn()
+    const { result } = renderHook(() => useTransaction(builder))
     expect(result.current.status).toBe('idle')
-  })
-
-  test('sets pending immediately when hash provided', () => {
-    ;(stellarService.getTransaction as Mock).mockResolvedValue({ status: 'pending' })
-    const { result } = renderHook(() => useTransaction('abc123'))
-    expect(result.current.status).toBe('pending')
-  })
-
-  test('transitions to success on SUCCESS response', async () => {
-    ;(stellarService.getTransaction as Mock).mockResolvedValue({ status: 'SUCCESS' })
-    const { result } = renderHook(() => useTransaction('abc123'))
-
-    await act(async () => {
-      vi.advanceTimersByTime(3000)
-      await Promise.resolve()
-    })
-
-    expect(result.current.status).toBe('success')
-    expect(result.current.data).toEqual({ status: 'SUCCESS' })
+    expect(result.current.result).toBeNull()
     expect(result.current.error).toBeNull()
   })
 
-  test('transitions to failed on FAILED response', async () => {
-    ;(stellarService.getTransaction as Mock).mockResolvedValue({
-      status: 'FAILED',
-      result_xdr: 'AAAABf////8AAAAA',
-    })
-    const { result } = renderHook(() => useTransaction('abc123'))
-
-    await act(async () => {
-      vi.advanceTimersByTime(3000)
-      await Promise.resolve()
+  test('transitions through statuses on success', async () => {
+    const builder = vi.fn().mockImplementation(async (onStatus) => {
+      onStatus('simulating')
+      onStatus('signing')
+      onStatus('submitting')
+      return 'tx-hash-123'
     })
 
-    expect(result.current.status).toBe('failed')
-    expect(result.current.error).toBe('AAAABf////8AAAAA')
-  })
-
-  test('times out after 60 seconds', async () => {
-    ;(stellarService.getTransaction as Mock).mockResolvedValue({ status: 'pending' })
-    const { result } = renderHook(() => useTransaction('abc123'))
+    const { result } = renderHook(() => useTransaction(builder))
 
     await act(async () => {
-      vi.advanceTimersByTime(60000)
-      await Promise.resolve()
-    })
-
-    expect(result.current.status).toBe('failed')
-    expect(result.current.error).toBe('Timeout')
-  })
-
-  test('keeps polling on transient network errors', async () => {
-    ;(stellarService.getTransaction as Mock)
-      .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValue({ status: 'SUCCESS' })
-
-    const { result } = renderHook(() => useTransaction('abc123'))
-
-    await act(async () => {
-      vi.advanceTimersByTime(3000)
-      await Promise.resolve()
-    })
-    await act(async () => {
-      vi.advanceTimersByTime(3000)
-      await Promise.resolve()
+      await result.current.execute()
     })
 
     expect(result.current.status).toBe('success')
+    expect(result.current.result).toBe('tx-hash-123')
+    expect(result.current.error).toBeNull()
+  })
+
+  test('sets error state on failure', async () => {
+    const builder = vi.fn().mockRejectedValue(new Error('Transaction failed'))
+
+    const { result } = renderHook(() => useTransaction(builder))
+
+    await act(async () => {
+      try {
+        await result.current.execute()
+      } catch {
+        // expected
+      }
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.error?.message).toBe('Transaction failed')
+    expect(result.current.result).toBeNull()
+  })
+
+  test('reset clears state back to idle', async () => {
+    const builder = vi.fn().mockResolvedValue('tx-hash')
+
+    const { result } = renderHook(() => useTransaction(builder))
+
+    await act(async () => {
+      await result.current.execute()
+    })
+
+    expect(result.current.status).toBe('success')
+
+    act(() => {
+      result.current.reset()
+    })
+
+    expect(result.current.status).toBe('idle')
+    expect(result.current.result).toBeNull()
+    expect(result.current.error).toBeNull()
   })
 })

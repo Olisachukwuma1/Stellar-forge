@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input, Button, ConfirmModal, InsufficientBalanceWarning } from './UI'
 import { isValidIPFSUri } from '../utils/validation'
