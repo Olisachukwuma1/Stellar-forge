@@ -32,6 +32,7 @@ interface HorizonOperationRecord {
   created_at: string
   transaction_successful: boolean
   transaction_hash: string
+  paging_token?: string
 }
 
 export function useTransactionHistory(
@@ -43,10 +44,15 @@ export function useTransactionHistory(
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const cacheRef = useRef<{ [key: string]: TransactionHistoryItem[] }>({});
   const debounceRef = useRef<number | null>(null);
   // Tracks the paging_token of the last fetched record for cursor-based pagination
   const cursorRef = useRef<string>('');
+  const fetchRef = useRef<(reset?: boolean) => void>(() => {});
+  const isMountedRef = useRef(true);
+  const pageRef = useRef(page);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pageSize = options.pageSize || 10
   const pollIntervalMs = options.pollIntervalMs ?? 30_000
@@ -81,20 +87,13 @@ export function useTransactionHistory(
         const resp = await fetch(url);
         if (!resp.ok) throw new Error('Failed to fetch transactions');
         const data = await resp.json();
-        const records: any[] = data._embedded?.records ?? [];
+        const records: HorizonOperationRecord[] = data._embedded?.records ?? [];
         const items: TransactionHistoryItem[] = records
-          .map((op: any) => parseOperation(op, options))
+          .map((op: HorizonOperationRecord) => parseOperation(op, options))
           .filter((item): item is TransactionHistoryItem => item !== null);
         if (records.length > 0) {
           cursorRef.current = records[records.length - 1].paging_token ?? '';
         }
-        const url = `https://horizon.stellar.org/accounts/${publicKey}/operations?order=desc&limit=${pageSize}&cursor=`
-        const resp = await fetch(url)
-        if (!resp.ok) throw new Error('Failed to fetch transactions')
-        const data = await resp.json()
-        const items: TransactionHistoryItem[] = (data._embedded?.records || [])
-          .map((op: HorizonOperationRecord) => parseOperation(op, options))
-          .filter((item: TransactionHistoryItem | null) => item !== null)
         cacheRef.current[cacheKey] = items
         setTransactions((prev: TransactionHistoryItem[]) =>
           reset ? items : [...prev, ...items],
@@ -110,6 +109,14 @@ export function useTransactionHistory(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [publicKey, page, pageSize, filterKey]
   );
+
+  useEffect(() => {
+    fetchRef.current = fetchTransactions;
+  }, [fetchTransactions]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
 
   // Debounce on publicKey change
   useEffect(() => {
@@ -165,11 +172,6 @@ function parseOperation(
   op: HorizonOperationRecord,
   options: UseTransactionHistoryOptions,
 ): TransactionHistoryItem | null {
-  // Filter by operation type and asset/issuer/contract if provided
-  // Token creation: manage_data or create_account or custom contract
-  // Mint: payment or custom contract
-  // Burn: payment with negative amount or custom contract
-  // This logic may need to be adapted for your token factory specifics
   let type: TransactionType = 'other'
   let token = ''
   let amount = ''
@@ -203,7 +205,6 @@ function parseOperation(
     return null
   if (options.issuer && op.asset_issuer && op.asset_issuer !== options.issuer)
     return null
-  // Add more contractId logic if needed
   if (type === 'other') return null
   return {
     id: op.id,
