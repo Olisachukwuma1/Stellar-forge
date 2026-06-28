@@ -122,8 +122,12 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({ initialTokenAddress 
     setStep('uploading-ipfs')
     let metadataUri: string
     try {
-      metadataUri = await ipfsService.uploadMetadata(imageFile!, description, tokenAddress, (p) =>
-        setUploadProgress(p),
+      metadataUri = await ipfsService.uploadMetadata(
+        imageFile!,
+        description,
+        tokenAddress,
+        (p) => setUploadProgress(p),
+        (attempt) => addToast(`Retrying upload… (attempt ${attempt}/3)`, 'warning'),
       )
       setFinalUri(metadataUri)
     } catch (err) {

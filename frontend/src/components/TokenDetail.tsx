@@ -19,6 +19,7 @@ import { MintForm } from './MintForm'
 import { BurnForm } from './BurnForm'
 import { SetMetadataForm } from './SetMetadataForm'
 import { TokenHistory } from './TokenHistory'
+import { NotFound } from './NotFound'
 
 const BASE_URL = 'https://stellarforge.app'
 
@@ -136,21 +137,7 @@ export const TokenDetail: React.FC = () => {
   }
 
   if (notFound || !token) {
-    return (
-      <div className="text-center py-20 space-y-4" role="alert">
-        <p className="text-2xl font-semibold text-gray-700 dark:text-gray-300">
-          {t('tokenDetail.loadError')}
-        </p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm break-all">
-          No token found at address: <span className="font-mono">{address}</span>
-        </p>
-        <Link to="/tokens">
-          <Button variant="outline" size="sm">
-            Back to Dashboard
-          </Button>
-        </Link>
-      </div>
-    )
+    return <NotFound />
   }
 
   const imageUrl = metadata?.image ? ipfsToGatewayUrl(metadata.image) : null

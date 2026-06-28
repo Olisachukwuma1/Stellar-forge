@@ -82,6 +82,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
         description,
         tokenName,
         (progress) => setUploadProgress(progress),
+        (attempt) => addToast(`Retrying upload… (attempt ${attempt}/3)`, 'warning'),
       )
 
       addToast('Metadata uploaded successfully!', 'success')

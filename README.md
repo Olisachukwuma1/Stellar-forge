@@ -175,7 +175,7 @@ npm run lint         # Lint code
 - `get_base_fee()`: Get token creation fee
 - `get_metadata_fee()`: Get metadata setting fee
 - `get_token_info(index)`: Get token information by index
-- `get_tokens_by_creator(creator)`: Get all token indices created by a given address
+- `get_tokens_by_creator(creator, offset, limit)`: Get a paginated slice of token indices created by a given address. The contract caps `limit` at `MAX_TOKENS_BY_CREATOR_PAGE` (currently 50) per call, so list iteration should advance `offset` by the previous page's length until a short page is returned. See [`docs/contract-abi.md`](./docs/contract-abi.md).
 
 ## Usage
 

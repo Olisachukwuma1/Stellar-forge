@@ -5,6 +5,7 @@ import { formatTimestamp } from '../utils/formatting'
 import { ExplorerLink } from './ExplorerLink'
 import { CopyButton } from './CopyButton'
 import { useTranslation } from 'react-i18next'
+import { serializeTransactionsToCSV } from '../utils/csv'
 
 interface TransactionHistoryProps {
   publicKey?: string
@@ -51,6 +52,21 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       pageSize: 10,
     })
 
+  const handleExportCSV = () => {
+    if (transactions.length === 0) return
+    const csvContent = serializeTransactionsToCSV(transactions)
+    const BOM = new Uint8Array([0xEF, 0xBB, 0xBF])
+    const blob = new Blob([BOM, csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `transaction_history_${Date.now()}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   // Infinite scroll
   React.useEffect(() => {
     const handleScroll = () => {
@@ -76,6 +92,29 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             <span className="text-xs text-gray-400 dark:text-gray-500">
               Last updated {timeAgo(lastUpdated)}
             </span>
+          )}
+          {transactions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50"
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+                />
+              </svg>
+              {t('transactionHistory.exportCsv', { defaultValue: 'Export CSV' })}
+            </button>
           )}
           <button
             type="button"

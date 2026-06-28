@@ -113,6 +113,7 @@
     "loadError": "Impossible de charger le jeton"
   },
   "transactionHistory": {
+    "exportCsv": "Exporter CSV",
     "noEvents": "Aucun événement trouvé.",
     "loadMore": "Charger plus",
     "retry": "Réessayer",

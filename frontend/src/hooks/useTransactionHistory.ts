@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { STELLAR_CONFIG } from '../config/stellar'
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { STELLAR_CONFIG } from '../config/stellar';
 
 export type TransactionType = 'create' | 'mint' | 'burn' | 'other'
 
@@ -39,20 +39,30 @@ export function useTransactionHistory(
   publicKey: string | undefined,
   options: UseTransactionHistoryOptions = {},
 ) {
-  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(true)
-  const [page, setPage] = useState(1)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const cacheRef = useRef<{ [key: string]: TransactionHistoryItem[] }>({})
-  const debounceRef = useRef<number | null>(null)
-  const cursorRef = useRef<string>('')
-  const pollRef = useRef<number | null>(null)
-  const isMountedRef = useRef(true)
+  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const cacheRef = useRef<{ [key: string]: TransactionHistoryItem[] }>({});
+  const debounceRef = useRef<number | null>(null);
+  // Tracks the paging_token of the last fetched record for cursor-based pagination
+  const cursorRef = useRef<string>('');
+  const fetchRef = useRef<(reset?: boolean) => void>(() => {});
+  const isMountedRef = useRef(true);
+  const pageRef = useRef(page);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pageSize = options.pageSize || 10
   const pollIntervalMs = options.pollIntervalMs ?? 30_000
+
+  // Stable string key derived from filter values so the cache is filter-aware
+  const filterKey = JSON.stringify({
+    assetCodes: options.assetCodes ? [...options.assetCodes].sort() : null,
+    issuer: options.issuer ?? null,
+    contractIds: options.contractIds ? [...options.contractIds].sort() : null,
+  });
 
   const fetchTransactions = useCallback(
     async (reset = false) => {
@@ -60,32 +70,34 @@ export function useTransactionHistory(
       setLoading(true)
       setError(null)
       try {
-        const cacheKey = `${publicKey}-${page}`
-        if (cacheRef.current[cacheKey]) {
+        const cacheKey = `${publicKey}-${page}-${filterKey}`;
+        const cached = cacheRef.current[cacheKey];
+        if (cached) {
           setTransactions((prev: TransactionHistoryItem[]) =>
-            reset ? cacheRef.current[cacheKey] : [...prev, ...cacheRef.current[cacheKey]],
-          )
-          setHasMore(cacheRef.current[cacheKey].length === pageSize)
-          setLoading(false)
-          setLastUpdated(new Date())
-          return
+            reset ? cached : [...prev, ...cached]
+          );
+          setHasMore(cached.length === pageSize);
+          setLoading(false);
+          return;
         }
-        const network = STELLAR_CONFIG.network as 'testnet' | 'mainnet'
-        const { horizonUrl } = STELLAR_CONFIG[network]
-        const cursor = reset ? '' : cursorRef.current
-        const url = `${horizonUrl}/accounts/${publicKey}/operations?order=desc&limit=${pageSize}&cursor=${cursor}`
-        const resp = await fetch(url)
-        if (!resp.ok) throw new Error('Failed to fetch transactions')
-        const data = await resp.json()
-        const records: HorizonOperationRecord[] = data._embedded?.records ?? []
+        const network = STELLAR_CONFIG.network as 'testnet' | 'mainnet';
+        const { horizonUrl } = STELLAR_CONFIG[network];
+        const cursor = reset ? '' : cursorRef.current;
+        const url = `${horizonUrl}/accounts/${publicKey}/operations?order=desc&limit=${pageSize}&cursor=${cursor}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Failed to fetch transactions');
+        const data = await resp.json();
+        const records: HorizonOperationRecord[] = data._embedded?.records ?? [];
         const items: TransactionHistoryItem[] = records
           .map((op: HorizonOperationRecord) => parseOperation(op, options))
-          .filter((item: TransactionHistoryItem | null) => item !== null)
+          .filter((item): item is TransactionHistoryItem => item !== null);
         if (records.length > 0) {
-          cursorRef.current = records[records.length - 1].paging_token ?? ''
+          cursorRef.current = records[records.length - 1].paging_token ?? '';
         }
         cacheRef.current[cacheKey] = items
-        setTransactions((prev: TransactionHistoryItem[]) => (reset ? items : [...prev, ...items]))
+        setTransactions((prev: TransactionHistoryItem[]) =>
+          reset ? items : [...prev, ...items],
+        )
         setHasMore(items.length === pageSize)
         setLastUpdated(new Date())
       } catch (e) {
@@ -94,36 +106,30 @@ export function useTransactionHistory(
         setLoading(false)
       }
     },
-    [publicKey, page, pageSize, options],
-  )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [publicKey, page, pageSize, filterKey]
+  );
 
-  // The effects below trigger fetches in response to specific values
-  // (publicKey, page, poll interval). They deliberately do NOT depend on
-  // `fetchTransactions` itself: its identity changes on every render because
-  // `options` is a fresh object each time, so listing it would re-run the
-  // effects in a loop. Instead we read the latest fetch function and page from
-  // refs, which keeps the dependency arrays honest and exhaustive.
-  const fetchRef = useRef(fetchTransactions)
   useEffect(() => {
-    fetchRef.current = fetchTransactions
-  }, [fetchTransactions])
+    fetchRef.current = fetchTransactions;
+  }, [fetchTransactions]);
 
-  const pageRef = useRef(page)
   useEffect(() => {
-    pageRef.current = page
-  }, [page])
+    pageRef.current = page;
+  }, [page]);
 
   // Debounce on publicKey change
   useEffect(() => {
     if (!publicKey) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      cursorRef.current = ''
-      setPage(1)
-      setTransactions([])
-      fetchRef.current(true)
-    }, 400)
-  }, [publicKey])
+      cursorRef.current = '';
+      setPage(1);
+      setTransactions([]);
+      fetchTransactions(true);
+    }, 400);
+    // eslint-disable-next-line
+  }, [publicKey]);
 
   // Fetch on page change
   useEffect(() => {
@@ -166,15 +172,14 @@ function parseOperation(
   op: HorizonOperationRecord,
   options: UseTransactionHistoryOptions,
 ): TransactionHistoryItem | null {
-  // Filter by operation type and asset/issuer/contract if provided
-  // Token creation: manage_data or create_account or custom contract
-  // Mint: payment or custom contract
-  // Burn: payment with negative amount or custom contract
-  // This logic may need to be adapted for your token factory specifics
   let type: TransactionType = 'other'
   let token = ''
   let amount = ''
-  if (op.type === 'manage_data' && op.name && op.name.toLowerCase().includes('token')) {
+  if (
+    op.type === 'manage_data' &&
+    op.name &&
+    op.name.toLowerCase().includes('token')
+  ) {
     type = 'create'
     token = op.name
   } else if (op.type === 'payment' && op.asset_code && op.amount) {
@@ -192,9 +197,14 @@ function parseOperation(
     token = op.asset_code
   }
   // Optionally filter by assetCodes, issuer, contractIds
-  if (options.assetCodes && token && !options.assetCodes.includes(token)) return null
-  if (options.issuer && op.asset_issuer && op.asset_issuer !== options.issuer) return null
-  // Add more contractId logic if needed
+  if (
+    options.assetCodes &&
+    token &&
+    !options.assetCodes.includes(token)
+  )
+    return null
+  if (options.issuer && op.asset_issuer && op.asset_issuer !== options.issuer)
+    return null
   if (type === 'other') return null
   return {
     id: op.id,

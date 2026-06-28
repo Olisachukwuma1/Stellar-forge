@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { ToastContainer, WalletButton } from './components/UI'
+import {
+  ToastContainer,
+  WalletButton,
+  SkeletonCard,
+  SkeletonTokenCard,
+  TokenDetailSkeleton,
+} from './components/UI'
 import './App.css'
 import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -18,13 +24,18 @@ import { Home } from './components/Home'
 import { CreateToken } from './components/CreateToken'
 import { MintForm } from './components/MintForm'
 import { BurnForm } from './components/BurnForm'
-import { TokenDashboard } from './components/TokenDashboard'
-import { TokenDetail } from './components/TokenDetail'
 import { TokenExplorer } from './components/TokenExplorer'
 import { AdminPanel } from './components/AdminPanel'
 import { MetadataForm } from './components/MetadataForm'
-import { Manage } from './components/Manage'
 import { NotFound } from './components/NotFound'
+
+const TokenDashboard = React.lazy(() =>
+  import('./components/TokenDashboard').then((m) => ({ default: m.TokenDashboard })),
+)
+const TokenDetail = React.lazy(() =>
+  import('./components/TokenDetail').then((m) => ({ default: m.TokenDetail })),
+)
+const Manage = React.lazy(() => import('./components/Manage').then((m) => ({ default: m.Manage })))
 import { useFactoryState } from './hooks/useFactoryState'
 import { isFactoryConfigured } from './config/env'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -76,11 +87,26 @@ const RouteErrorFallback: React.FC<RouteErrorFallbackProps> = ({
   </div>
 )
 
-const RouteBoundary: React.FC<{ routeName: string; children: React.ReactNode }> = ({
-  routeName,
-  children,
-}) => (
-  <ErrorBoundary fallback={<RouteErrorFallback routeName={routeName} />}>{children}</ErrorBoundary>
+const TokenDashboardFallback = () => (
+  <div
+    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+    aria-busy="true"
+    aria-label="Loading tokens"
+  >
+    {Array.from({ length: 6 }).map((_, i) => (
+      <SkeletonTokenCard key={i} />
+    ))}
+  </div>
+)
+
+const RouteBoundary: React.FC<{
+  routeName: string
+  fallback?: React.ReactNode
+  children: React.ReactNode
+}> = ({ routeName, fallback, children }) => (
+  <ErrorBoundary fallback={<RouteErrorFallback routeName={routeName} />}>
+    <React.Suspense fallback={fallback || <SkeletonCard />}>{children}</React.Suspense>
+  </ErrorBoundary>
 )
 
 function AppContent() {
@@ -268,7 +294,7 @@ function AppContent() {
                 path="/tokens"
                 element={
                   <ProtectedRoute>
-                    <RouteBoundary routeName="Tokens">
+                    <RouteBoundary routeName="Tokens" fallback={<TokenDashboardFallback />}>
                       <TokenDashboard />
                     </RouteBoundary>
                   </ProtectedRoute>
@@ -278,7 +304,7 @@ function AppContent() {
                 path="/tokens/:address"
                 element={
                   <ProtectedRoute>
-                    <RouteBoundary routeName="Token Detail">
+                    <RouteBoundary routeName="Token Detail" fallback={<TokenDetailSkeleton />}>
                       <TokenDetail />
                     </RouteBoundary>
                   </ProtectedRoute>
@@ -288,7 +314,7 @@ function AppContent() {
                 path="/token/:address"
                 element={
                   <ProtectedRoute>
-                    <RouteBoundary routeName="Token Detail">
+                    <RouteBoundary routeName="Token Detail" fallback={<TokenDetailSkeleton />}>
                       <TokenDetail />
                     </RouteBoundary>
                   </ProtectedRoute>
@@ -331,18 +357,8 @@ function AppContent() {
                 path="/dashboard"
                 element={
                   <ProtectedRoute>
-                    <RouteBoundary routeName="Dashboard">
+                    <RouteBoundary routeName="Dashboard" fallback={<TokenDashboardFallback />}>
                       <TokenDashboard />
-                    </RouteBoundary>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/token/:address"
-                element={
-                  <ProtectedRoute>
-                    <RouteBoundary routeName="Token Detail">
-                      <TokenDetail />
                     </RouteBoundary>
                   </ProtectedRoute>
                 }
@@ -351,7 +367,7 @@ function AppContent() {
                 path="/manage"
                 element={
                   <ProtectedRoute>
-                    <RouteBoundary routeName="Manage">
+                    <RouteBoundary routeName="Manage" fallback={<SkeletonCard />}>
                       <Manage />
                     </RouteBoundary>
                   </ProtectedRoute>

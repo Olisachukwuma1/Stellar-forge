@@ -100,6 +100,7 @@
     "loadError": "Não foi possível carregar o token"
   },
   "transactionHistory": {
+    "exportCsv": "Exportar CSV",
     "noEvents": "Nenhum evento encontrado.",
     "loadMore": "Carregar mais",
     "retry": "Repetir",

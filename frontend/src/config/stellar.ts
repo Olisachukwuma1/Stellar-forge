@@ -27,8 +27,21 @@ export const NETWORK_CONFIGS: Record<Network, NetworkConfig> = {
   },
 }
 
+const DEFAULT_NETWORK: Network = 'testnet'
+
+function isSupportedNetwork(value: string): value is Network {
+  return value in NETWORK_CONFIGS
+}
+
+// Clamp the configured network to one we have config for. An unrecognized
+// VITE_NETWORK (e.g. "standalone") would otherwise leave every consumer of
+// STELLAR_CONFIG[network] dereferencing undefined and crash the whole app.
+export const resolvedNetwork: Network = isSupportedNetwork(ENV.network)
+  ? ENV.network
+  : DEFAULT_NETWORK
+
 export const STELLAR_CONFIG = {
-  network: ENV.network,
+  network: resolvedNetwork,
   factoryContractId: ENV.factoryContractId,
   tokenWasmHash: ENV.tokenWasmHash,
   ...NETWORK_CONFIGS,

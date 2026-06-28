@@ -113,6 +113,7 @@
     "loadError": "Unable to load token"
   },
   "transactionHistory": {
+    "exportCsv": "Export CSV",
     "noEvents": "No events found.",
     "loadMore": "Load more",
     "retry": "Retry",

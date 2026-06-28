@@ -4,6 +4,7 @@ export interface RetryOptions {
   maxAttempts?: number
   baseDelayMs?: number
   shouldRetry?: (error: unknown) => boolean
+  onRetry?: (attempt: number, delayMs: number) => void
 }
 
 const DEFAULT_MAX_ATTEMPTS = 3
@@ -112,6 +113,7 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     baseDelayMs = DEFAULT_BASE_DELAY_MS,
     shouldRetry = isTransientError,
+    onRetry,
   } = options
 
   let lastError: unknown
@@ -138,6 +140,9 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
         error instanceof HttpError && error.retryAfter !== undefined
           ? error.retryAfter * 1000
           : baseDelayMs * Math.pow(2, attempt - 1)
+
+      const nextAttempt = attempt + 1
+      onRetry?.(nextAttempt, delayMs)
 
       if (import.meta.env.DEV) {
         console.warn(`[withRetry] attempt ${attempt} failed, retrying in ${delayMs}ms`, error)

@@ -1,102 +1,74 @@
 import { Page } from '@playwright/test'
 
-export interface FreighterMock {
-  isConnected: () => Promise<{ isConnected: boolean }>
-  getAddress: () => Promise<{ address: string }>
-  requestAccess: () => Promise<{ address: string }>
-  signTransaction: (xdr: string) => Promise<{ signedTxXdr: string }>
-  getNetwork: () => Promise<{ network: string }>
-}
-
-declare global {
-  interface Window {
-    freighter?: FreighterMock
-  }
-}
-
 /**
- * Mocks the Freighter wallet browser extension on the page.
+ * Mocks the Freighter wallet for E2E tests.
  *
- * @stellar/freighter-api v6.0.1 uses two mechanisms:
- *   1. window.freighter presence check (isConnected shortcircuits to truthy when set)
- *   2. postMessage protocol (FREIGHTER_EXTERNAL_MSG_REQUEST / RESPONSE) for getAddress,
- *      signTransaction, etc.
- *
- * Key design: WatchWalletChanges.fetchInfo() calls REQUEST_PUBLIC_KEY then
- * REQUEST_NETWORK_DETAILS in sequence. We intentionally do NOT respond to
- * REQUEST_NETWORK_DETAILS — that makes the watcher hang at the second await and
- * never fire its auto-connect callback, so "Connect Wallet" remains visible.
- * Explicit connect() only sends REQUEST_PUBLIC_KEY, so it still works.
- *
- * ToS is pre-accepted via localStorage so the modal does not block connect().
+ * `@stellar/freighter-api` talks to the browser extension over a
+ * `window.postMessage` request/response channel — it does NOT call methods on a
+ * `window.freighter` object. So we:
+ *   1. set `window.freighter = true` so `isConnected()` reports the wallet as
+ *      installed (the api short-circuits on this flag), and
+ *   2. answer the `FREIGHTER_EXTERNAL_MSG_REQUEST` messages the api posts with a
+ *      matching `FREIGHTER_EXTERNAL_MSG_RESPONSE` carrying the mock account.
  */
 export async function mockFreighter(page: Page, address: string) {
   await page.addInitScript((mockAddress: string) => {
-    // Pre-accept Terms of Service so the modal doesn't block wallet connection
-    localStorage.setItem('stellar_forge_tos_accepted', 'true')
+    // Marks Freighter as installed for isConnected().
+    ;(window as unknown as { freighter: boolean }).freighter = true;
 
-    // Set window.freighter so isConnected() returns {isConnected: <truthy>} immediately
-    window.freighter = {
-      isConnected: () => Promise.resolve({ isConnected: true }),
-      getAddress: () => Promise.resolve({ address: mockAddress }),
-      requestAccess: () => Promise.resolve({ address: mockAddress }),
-      signTransaction: (xdr: string) => Promise.resolve({ signedTxXdr: xdr }),
-      getNetwork: () => Promise.resolve({ network: 'STANDALONE' }),
-    }
+    const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
 
-    // Intercept the postMessage protocol used by freighter-api for getAddress(),
-    // signTransaction(), REQUEST_NETWORK_DETAILS, etc.
-    // Request format:  { source: 'FREIGHTER_EXTERNAL_MSG_REQUEST', messageId: number, type: string, ... }
-    // Response format: { source: 'FREIGHTER_EXTERNAL_MSG_RESPONSE', messagedId: number, ... }
-    // Note: 'messagedId' (with trailing 'd') is the Freighter library's key name.
-    window.addEventListener('message', (event) => {
-      const data = event.data as Record<string, unknown>
-      if (!data || data['source'] !== 'FREIGHTER_EXTERNAL_MSG_REQUEST') return
+    window.addEventListener('message', (event: MessageEvent) => {
+      const req = event.data;
+      if (!req || req.source !== 'FREIGHTER_EXTERNAL_MSG_REQUEST') return;
 
-      const messageId = data['messageId']
-      const type = data['type'] as string
-
-      const base: Record<string, unknown> = {
-        source: 'FREIGHTER_EXTERNAL_MSG_RESPONSE',
-        messagedId: messageId,
-      }
-
-      switch (type) {
+      // Build the response payload for the requested operation.
+      const payload: Record<string, unknown> = {};
+      switch (req.type) {
         case 'REQUEST_CONNECTION_STATUS':
-          window.postMessage({ ...base, isConnected: true }, '*')
-          break
-        case 'REQUEST_PUBLIC_KEY':
-          window.postMessage({ ...base, publicKey: mockAddress }, '*')
-          break
+          payload.isConnected = true;
+          break;
         case 'REQUEST_ACCESS':
-          window.postMessage({ ...base, publicKey: mockAddress }, '*')
-          break
+        case 'REQUEST_PUBLIC_KEY':
+          payload.publicKey = mockAddress;
+          break;
+        case 'REQUEST_NETWORK':
         case 'REQUEST_NETWORK_DETAILS':
-          // Intentionally no response: WatchWalletChanges.fetchInfo() awaits _() after A().
-          // Without a response _() hangs forever, so the watcher callback never fires and
-          // the wallet does not auto-connect on mount.  Explicit connect() is unaffected
-          // because getAddress() only sends REQUEST_PUBLIC_KEY, not REQUEST_NETWORK_DETAILS.
-          break
+          // The api reads a nested `networkDetails` object off the response.
+          payload.networkDetails = {
+            network: 'TESTNET',
+            networkName: 'TESTNET',
+            networkUrl: 'https://horizon-testnet.stellar.org',
+            networkPassphrase: TESTNET_PASSPHRASE,
+            sorobanRpcUrl: 'https://soroban-testnet.stellar.org',
+          };
+          break;
         case 'REQUEST_ALLOWED_STATUS':
-          window.postMessage({ ...base, isAllowed: true }, '*')
-          break
         case 'SET_ALLOWED_STATUS':
-          window.postMessage({ ...base, isAllowed: true }, '*')
-          break
+          payload.isAllowed = true;
+          break;
         case 'SUBMIT_TRANSACTION':
-          window.postMessage(
-            {
-              ...base,
-              signedTransaction: data['transactionXdr'],
-              signerAddress: mockAddress,
-            },
-            '*',
-          )
-          break
+          // Echo the XDR back as the "signed" transaction.
+          payload.signedTransaction = req.transactionXdr;
+          payload.signerAddress = mockAddress;
+          break;
+        case 'REQUEST_USER_INFO':
+          payload.userInfo = { publicKey: mockAddress };
+          break;
         default:
-          // Don't respond to unknown message types
-          break
+          break;
       }
-    })
-  }, address)
+
+      // The api matches responses on `messagedId` (note the upstream typo) and
+      // requires this exact source string.
+      window.postMessage(
+        {
+          source: 'FREIGHTER_EXTERNAL_MSG_RESPONSE',
+          messagedId: req.messageId,
+          ...payload,
+        },
+        window.location.origin,
+      );
+    });
+  }, address);
 }
