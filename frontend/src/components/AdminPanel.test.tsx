@@ -19,6 +19,10 @@ vi.mock('../hooks/useTransaction', () => ({
   useTransaction: vi.fn(),
 }))
 
+vi.mock('../context/NetworkContext', () => ({
+  useNetwork: () => ({ network: 'testnet', mismatch: { isMismatch: false } }),
+}))
+
 const mockAddToast = vi.fn()
 const mockUpdateFees = vi.fn()
 const mockExecute = vi.fn()
