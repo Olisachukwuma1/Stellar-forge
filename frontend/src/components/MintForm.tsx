@@ -64,7 +64,7 @@ export const MintForm: React.FC<MintFormProps> = ({
     formState: { errors },
   } = useForm<MintFormData>({
     defaultValues: {
-      tokenSelect: initialAddress || (myTokens.length > 0 ? myTokens[0].address : MANUAL_VALUE),
+      tokenSelect: initialAddress || (myTokens.length > 0 ? myTokens[0]!.address : MANUAL_VALUE),
       tokenManual: initialAddress,
       recipient: '',
       amount: '',

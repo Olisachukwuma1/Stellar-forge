@@ -1,16 +1,17 @@
 import type { StellarService as IStellarService } from './stellar-impl'
+import type { Network } from '../config/stellar'
 
 export type { FactoryState } from '../types'
 
 export class StellarService {
-  private network: 'testnet' | 'mainnet'
+  private network: Network
   private implPromise: Promise<IStellarService> | null = null
 
-  constructor(network: 'testnet' | 'mainnet' = 'testnet') {
+  constructor(network: Network = 'testnet') {
     this.network = network
   }
 
-  setNetwork(network: 'testnet' | 'mainnet') {
+  setNetwork(network: Network) {
     this.network = network
     this.implPromise = null
   }
@@ -112,7 +113,7 @@ export const stellarService = new StellarService()
 export async function buildFeeBumpTransaction(
   innerTxXdr: string,
   feeSource: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
   baseFee?: string,
 ): Promise<string> {
   const { buildFeeBumpTransaction: impl } = await import('./stellar-impl')
@@ -121,7 +122,7 @@ export async function buildFeeBumpTransaction(
 
 export async function submitFeeBumpTransaction(
   signedFeeBumpXdr: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
 ): Promise<string> {
   const { submitFeeBumpTransaction: impl } = await import('./stellar-impl')
   return impl(signedFeeBumpXdr, network)

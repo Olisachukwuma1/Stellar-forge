@@ -101,6 +101,9 @@ export const NavBar: React.FC<NavBarProps> = ({ onHelpClick, isAdmin = false }) 
         <NavLink to="/explorer" className={getLinkClass}>
           {t('nav.explorer', 'Explorer')}
         </NavLink>
+        <NavLink to="/activity" className={getLinkClass} onClick={closeMenu}>
+          {t('nav.activity', 'Activity')}
+        </NavLink>
         {isAdmin && (
           <NavLink
             to="/admin"

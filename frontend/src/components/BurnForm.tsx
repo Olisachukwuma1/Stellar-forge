@@ -60,7 +60,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
     formState: { errors },
   } = useForm<BurnFormData>({
     defaultValues: {
-      tokenSelect: initialAddress || (myTokens.length > 0 ? myTokens[0].address : MANUAL_VALUE),
+      tokenSelect: initialAddress || (myTokens.length > 0 ? myTokens[0]!.address : MANUAL_VALUE),
       tokenManual: initialAddress,
       amount: '',
     },

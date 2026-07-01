@@ -77,6 +77,7 @@ const renderWithProviders = async (
         },
         connect: vi.fn(),
         disconnect: vi.fn(),
+        refreshBalance: vi.fn(),
         isConnecting: false,
         error: null,
         isInstalled: true,
@@ -87,6 +88,7 @@ const renderWithProviders = async (
           stellarService: {
             updateFees: mockUpdateFees,
           } as unknown as StellarService,
+          ipfsService: {} as unknown as import('../services/ipfs').IPFSService,
         }}
       >
         <ToastContext.Provider

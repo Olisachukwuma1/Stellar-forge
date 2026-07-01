@@ -6,9 +6,8 @@ import { useToast } from '../context/ToastContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useNetwork } from '../context/NetworkContext'
 import { validateTokenParams } from '../utils/validation'
-import { formatXLM, stroopsToXLM } from '../utils/formatting'
-import { useFactoryState } from '../hooks/useFactoryState'
 import { logger } from '../utils/logger'
+import { FeeDisplay } from './FeeDisplay'
 
 interface TokenFormProps {
   onSubmit: (params: {
@@ -18,8 +17,6 @@ interface TokenFormProps {
     initialSupply: string
   }) => Promise<void>
   isLoading?: boolean
-  /** Override the fee shown in the preview (stroops). Falls back to on-chain base_fee. */
-  estimatedFee?: string
 }
 
 interface FormErrors {
@@ -29,23 +26,11 @@ interface FormErrors {
   initialSupply?: string
 }
 
-export const TokenForm: React.FC<TokenFormProps> = ({
-  onSubmit,
-  isLoading = false,
-  estimatedFee,
-}) => {
+export const TokenForm: React.FC<TokenFormProps> = ({ onSubmit, isLoading = false }) => {
   const { t } = useTranslation()
   const { addToast } = useToast()
   const { wallet } = useWalletContext()
   const { network } = useNetwork()
-  const { state: factoryState } = useFactoryState()
-
-  // Resolve fee: prop override → on-chain base_fee → fallback 0
-  const feeXLM = estimatedFee
-    ? stroopsToXLM(estimatedFee)
-    : factoryState?.baseFee
-      ? stroopsToXLM(factoryState.baseFee)
-      : 0
 
   const [formData, setFormData] = useState({
     name: '',
@@ -206,9 +191,11 @@ export const TokenForm: React.FC<TokenFormProps> = ({
               {t('tokenForm.feeDescription')}
             </p>
           </div>
-          <p className="text-lg font-semibold text-blue-900 dark:text-blue-300">
-            {formatXLM(feeXLM)}
-          </p>
+          <FeeDisplay
+            feeType="base"
+            showLabel={false}
+            className="text-lg font-semibold text-blue-900 dark:text-blue-300"
+          />
         </div>
       </div>
 

@@ -124,7 +124,7 @@ describe('useTransactionHistory', () => {
       mockOk(page([paymentOp()]))
       renderHook(() => useTransactionHistory(PUB))
       await fireDebounce()
-      expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain(TESTNET)
+      expect(vi.mocked(global.fetch).mock.calls[0]![0]).toContain(TESTNET)
     })
 
     it('uses the mainnet Horizon URL when network is mainnet', async () => {
@@ -132,7 +132,7 @@ describe('useTransactionHistory', () => {
       mockOk(page([paymentOp()]))
       renderHook(() => useTransactionHistory(PUB))
       await fireDebounce()
-      expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain(MAINNET)
+      expect(vi.mocked(global.fetch).mock.calls[0]![0]).toContain(MAINNET)
     })
   })
 
@@ -142,19 +142,24 @@ describe('useTransactionHistory', () => {
     it('does not fetch before 400 ms have elapsed', () => {
       mockOk(page([]))
       renderHook(() => useTransactionHistory(PUB))
-      act(() => { vi.advanceTimersByTime(399) })
+      act(() => {
+        vi.advanceTimersByTime(399)
+      })
       expect(global.fetch).not.toHaveBeenCalled()
     })
 
     it('cancels an in-flight debounce when publicKey changes rapidly', async () => {
       mockOk(page([]))
-      const { rerender } = renderHook(
-        ({ k }: { k: string }) => useTransactionHistory(k),
-        { initialProps: { k: 'GKEY1' } },
-      )
-      act(() => { vi.advanceTimersByTime(200) })
+      const { rerender } = renderHook(({ k }: { k: string }) => useTransactionHistory(k), {
+        initialProps: { k: 'GKEY1' },
+      })
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
       rerender({ k: 'GKEY2' })
-      act(() => { vi.advanceTimersByTime(200) })
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
       // 200 ms since last key — debounce not yet fired
       expect(global.fetch).not.toHaveBeenCalled()
 
@@ -165,7 +170,7 @@ describe('useTransactionHistory', () => {
       })
       // Exactly one fetch for GKEY2, none for GKEY1
       expect(global.fetch).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain('GKEY2')
+      expect(vi.mocked(global.fetch).mock.calls[0]![0]).toContain('GKEY2')
     })
   })
 
@@ -176,7 +181,10 @@ describe('useTransactionHistory', () => {
       let resolveJson!: (v: unknown) => void
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => new Promise((r) => { resolveJson = r }),
+        json: () =>
+          new Promise((r) => {
+            resolveJson = r
+          }),
       } as Response)
 
       const { result } = renderHook(() => useTransactionHistory(PUB))
@@ -225,9 +233,7 @@ describe('useTransactionHistory', () => {
         paymentOp({ id: `op${i}`, paging_token: `c${i}` }),
       )
       mockOk(page(records))
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { pageSize: 3 }),
-      )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { pageSize: 3 }))
       await fireDebounce()
       expect(result.current.hasMore).toBe(true)
     })
@@ -259,9 +265,7 @@ describe('useTransactionHistory', () => {
       mockOk(page(p1))
       mockOk(page(p2))
 
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { pageSize: 2 }),
-      )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { pageSize: 2 }))
       await fireDebounce()
       expect(result.current.transactions).toHaveLength(2)
       expect(result.current.hasMore).toBe(true)
@@ -282,9 +286,7 @@ describe('useTransactionHistory', () => {
       mockOk(page(p1))
       mockOk(page([]))
 
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { pageSize: 2 }),
-      )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { pageSize: 2 }))
       await fireDebounce()
 
       await act(async () => {
@@ -293,7 +295,7 @@ describe('useTransactionHistory', () => {
         await Promise.resolve()
       })
 
-      const secondUrl = vi.mocked(global.fetch).mock.calls[1][0] as string
+      const secondUrl = vi.mocked(global.fetch).mock.calls[1]![0] as string
       expect(secondUrl).toContain('cursor=tok_last')
     })
 
@@ -301,7 +303,7 @@ describe('useTransactionHistory', () => {
       mockOk(page([paymentOp()]))
       renderHook(() => useTransactionHistory(PUB))
       await fireDebounce()
-      const firstUrl = vi.mocked(global.fetch).mock.calls[0][0] as string
+      const firstUrl = vi.mocked(global.fetch).mock.calls[0]![0] as string
       expect(firstUrl).toContain('cursor=')
       // cursor param is present but empty (reset path)
       expect(firstUrl).toMatch(/cursor=$/)
@@ -312,13 +314,15 @@ describe('useTransactionHistory', () => {
         paymentOp({ id: `op${i}`, paging_token: `c${i}` }),
       )
       mockOk(page(p1))
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { pageSize: 2 }),
-      )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { pageSize: 2 }))
       // Advance timer to trigger fetch but don't await completion
-      act(() => { vi.advanceTimersByTime(400) })
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
       // loading=true here — loadMore must be a no-op
-      act(() => { result.current.loadMore() })
+      act(() => {
+        result.current.loadMore()
+      })
       expect(global.fetch).toHaveBeenCalledTimes(1)
     })
   })
@@ -330,10 +334,9 @@ describe('useTransactionHistory', () => {
       mockOk(page([paymentOp()]))
       mockOk(page([paymentOp({ id: 'op_b' })]))
 
-      const { rerender } = renderHook(
-        ({ k }: { k: string }) => useTransactionHistory(k),
-        { initialProps: { k: 'KEY_A' } },
-      )
+      const { rerender } = renderHook(({ k }: { k: string }) => useTransactionHistory(k), {
+        initialProps: { k: 'KEY_A' },
+      })
       await fireDebounce() // fetches KEY_A — fetch count: 1
 
       rerender({ k: 'KEY_B' })
@@ -423,7 +426,7 @@ describe('useTransactionHistory', () => {
 
     it('transaction_successful=false maps to status=failed', async () => {
       const txns = await fetchSingle(paymentOp({ transaction_successful: false }))
-      expect(txns[0].status).toBe('failed')
+      expect(txns[0]!.status).toBe('failed')
     })
   })
 
@@ -431,26 +434,26 @@ describe('useTransactionHistory', () => {
 
   describe('filter options applied to parsed operations', () => {
     it('excludes operations whose asset_code is not in assetCodes', async () => {
-      mockOk(page([
-        paymentOp({ asset_code: 'TKA', id: 'op1' }),
-        paymentOp({ asset_code: 'TKB', id: 'op2', paging_token: 'c2' }),
-      ]))
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { assetCodes: ['TKB'] }),
+      mockOk(
+        page([
+          paymentOp({ asset_code: 'TKA', id: 'op1' }),
+          paymentOp({ asset_code: 'TKB', id: 'op2', paging_token: 'c2' }),
+        ]),
       )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { assetCodes: ['TKB'] }))
       await fireDebounce()
       expect(result.current.transactions).toHaveLength(1)
-      expect(result.current.transactions[0].token).toBe('TKB')
+      expect(result.current.transactions[0]!.token).toBe('TKB')
     })
 
     it('excludes operations whose asset_issuer does not match issuer filter', async () => {
-      mockOk(page([
-        paymentOp({ asset_issuer: 'GISSUER_MATCH', id: 'op1' }),
-        paymentOp({ asset_issuer: 'GISSUER_OTHER', id: 'op2', paging_token: 'c2' }),
-      ]))
-      const { result } = renderHook(() =>
-        useTransactionHistory(PUB, { issuer: 'GISSUER_MATCH' }),
+      mockOk(
+        page([
+          paymentOp({ asset_issuer: 'GISSUER_MATCH', id: 'op1' }),
+          paymentOp({ asset_issuer: 'GISSUER_OTHER', id: 'op2', paging_token: 'c2' }),
+        ]),
       )
+      const { result } = renderHook(() => useTransactionHistory(PUB, { issuer: 'GISSUER_MATCH' }))
       await fireDebounce()
       expect(result.current.transactions).toHaveLength(1)
     })

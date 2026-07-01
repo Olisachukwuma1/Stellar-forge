@@ -23,7 +23,9 @@ import {
   xdr,
   FeeBumpTransaction,
   Transaction,
+  StrKey,
 } from 'stellar-sdk'
+import type { Network } from '../config/stellar'
 import { withRetry, HttpError } from '../utils/retry'
 import { parseContractError } from '../utils/contractErrors'
 
@@ -50,15 +52,17 @@ function toAppError(err: unknown): AppError {
 
 // ── Network helpers ───────────────────────────────────────────────────────────
 
-function getNetworkConfig(network: 'testnet' | 'mainnet') {
+function getNetworkConfig(network: Network) {
   return NETWORK_CONFIGS[network]
 }
 
-function getNetworkPassphrase(network: 'testnet' | 'mainnet'): string {
-  return network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+function getNetworkPassphrase(network: Network): string {
+  if (network === 'mainnet') return Networks.PUBLIC
+  if (network === 'testnet') return Networks.TESTNET
+  return NETWORK_CONFIGS[network].networkPassphrase
 }
 
-function getRpcServer(network: 'testnet' | 'mainnet'): rpc.Server {
+function getRpcServer(network: Network): rpc.Server {
   return new rpc.Server(getNetworkConfig(network).sorobanRpcUrl, { allowHttp: false })
 }
 
@@ -71,7 +75,7 @@ function getRpcServer(network: 'testnet' | 'mainnet'): rpc.Server {
 async function simulateAndSubmit(
   server: rpc.Server,
   tx: ReturnType<TransactionBuilder['build']>,
-  network: 'testnet' | 'mainnet',
+  network: Network,
 ): Promise<string> {
   const simResult = await server.simulateTransaction(tx)
 
@@ -127,7 +131,7 @@ async function pollTransaction(
 export async function buildFeeBumpTransaction(
   innerTxXdr: string,
   feeSource: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
   baseFee: string = String(Number(BASE_FEE) * 10),
 ): Promise<string> {
   const networkPassphrase = getNetworkPassphrase(network)
@@ -146,7 +150,7 @@ export async function buildFeeBumpTransaction(
  */
 export async function submitFeeBumpTransaction(
   signedFeeBumpXdr: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
 ): Promise<string> {
   const server = getRpcServer(network)
   const feeBumpTx = TransactionBuilder.fromXDR(
@@ -169,7 +173,7 @@ export async function submitFeeBumpTransaction(
 async function buildTxBuilder(
   server: rpc.Server,
   sourceAddress: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
 ): Promise<TransactionBuilder> {
   const account = await server.getAccount(sourceAddress)
   return new TransactionBuilder(account, {
@@ -189,7 +193,7 @@ async function callView(
   method: string,
   args: xdr.ScVal[],
   sourceAddress: string,
-  network: 'testnet' | 'mainnet',
+  network: Network,
 ): Promise<xdr.ScVal> {
   const contract = new Contract(contractId)
   const account = await server.getAccount(sourceAddress)
@@ -233,13 +237,14 @@ interface RpcGetEventsResult {
 
 // ── XDR decode helper ─────────────────────────────────────────────────────────
 
-function scValToString(val: xdr.ScVal): string {
+function scValToString(val: xdr.ScVal | undefined): string {
+  if (!val) return ''
   try {
     const type = val.switch()
     if (type === xdr.ScValType.scvAddress()) {
       const addr = val.address()
       if (addr.switch() === xdr.ScAddressType.scAddressTypeAccount()) {
-        return addr.accountId().publicKey().toString()
+        return StrKey.encodeEd25519PublicKey(addr.accountId().ed25519())
       }
       return Array.from(addr.contractId() as Uint8Array)
         .map((b) => b.toString(16).padStart(2, '0'))
@@ -281,7 +286,7 @@ const EVENT_TOPICS: ContractEventType[] = [
 async function parseRpcEvent(raw: RpcEventResponse): Promise<ContractEvent | null> {
   try {
     if (!raw.topic?.length || raw.topic.length < 2) return null
-    const topicVal = xdr.ScVal.fromXDR(raw.topic[1], 'base64') // second topic is the action
+    const topicVal = xdr.ScVal.fromXDR(raw.topic[1]!, 'base64') // second topic is the action
     const eventType = scValToString(topicVal) as ContractEventType
     if (!EVENT_TOPICS.includes(eventType)) return null
 
@@ -343,11 +348,7 @@ async function parseRpcEvent(raw: RpcEventResponse): Promise<ContractEvent | nul
 
 // ── JSON-RPC helper ───────────────────────────────────────────────────────────
 
-async function rpcCall<T>(
-  method: string,
-  params: unknown,
-  network: 'testnet' | 'mainnet',
-): Promise<T> {
+async function rpcCall<T>(method: string, params: unknown, network: Network): Promise<T> {
   return withRetry(async () => {
     const res = await fetch(getNetworkConfig(network).sorobanRpcUrl, {
       method: 'POST',
@@ -375,13 +376,13 @@ async function rpcCall<T>(
 // ── StellarService ────────────────────────────────────────────────────────────
 
 export class StellarService {
-  private network: 'testnet' | 'mainnet'
+  private network: Network
 
-  constructor(network: 'testnet' | 'mainnet' = 'testnet') {
+  constructor(network: Network = 'testnet') {
     this.network = network
   }
 
-  setNetwork(network: 'testnet' | 'mainnet') {
+  setNetwork(network: Network) {
     this.network = network
   }
 
@@ -894,7 +895,7 @@ export class StellarService {
       decimals: 7,
       creator: createdEvent?.data.creator ?? '',
       createdAt: createdEvent?.timestamp ?? 0,
-      metadataUri: metaEvent?.data.metadataUri,
+      metadataUri: metaEvent?.data.metadataUri ?? '',
     }
   }
 

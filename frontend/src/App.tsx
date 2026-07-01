@@ -5,6 +5,7 @@ import {
   SkeletonCard,
   SkeletonTokenCard,
   TokenDetailSkeleton,
+  OnboardingModal,
 } from './components/UI'
 import './App.css'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +29,8 @@ import { TokenExplorer } from './components/TokenExplorer'
 import { AdminPanel } from './components/AdminPanel'
 import { MetadataForm } from './components/MetadataForm'
 import { NotFound } from './components/NotFound'
+import { TransactionHistory } from './components/TransactionHistory'
+import { AnalyticsOptOut } from './components/AnalyticsOptOut'
 
 const TokenDashboard = React.lazy(() =>
   import('./components/TokenDashboard').then((m) => ({ default: m.TokenDashboard })),
@@ -220,7 +223,7 @@ function AppContent() {
             <NavBar onHelpClick={() => setShowOnboarding(true)} isAdmin={isAdmin} />
           </div>
         </header>
-        {showOnboarding && null /* OnboardingModal placeholder */}
+        <OnboardingModal forceOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
 
         {!isFactoryConfigured() && (
           <div
@@ -373,10 +376,24 @@ function AppContent() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/activity"
+                element={
+                  <ProtectedRoute>
+                    <RouteBoundary routeName="Activity">
+                      <TransactionHistory publicKey={wallet.address ?? ''} />
+                    </RouteBoundary>
+                  </ProtectedRoute>
+                }
+              />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>
+
+        <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 mt-4 border-t border-gray-200 dark:border-slate-700 flex justify-center">
+          <AnalyticsOptOut />
+        </footer>
 
         <ToastContainer />
       </div>

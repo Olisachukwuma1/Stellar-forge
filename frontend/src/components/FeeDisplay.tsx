@@ -7,6 +7,8 @@ import { useXlmPrice } from '../hooks/useXlmPrice'
 interface FeeDisplayProps {
   feeType: 'base' | 'metadata'
   className?: string
+  /** When false, render only the amount (+USD) without the "Creation Fee:" prefix. */
+  showLabel?: boolean
 }
 
 // Module-level cache — shared across all FeeDisplay instances
@@ -32,6 +34,7 @@ const LABELS: Record<FeeDisplayProps['feeType'], string> = {
 export const FeeDisplay: React.FC<FeeDisplayProps> = ({
   feeType,
   className = '',
+  showLabel = true,
 }: FeeDisplayProps) => {
   const [xlm, setXlm] = useState<number | null>(null)
   const [error, setError] = useState(false)
@@ -74,7 +77,8 @@ export const FeeDisplay: React.FC<FeeDisplayProps> = ({
 
   return (
     <span className={`text-sm text-gray-700 ${className}`}>
-      {label}: {formatXLM(xlm)}
+      {showLabel && `${label}: `}
+      {formatXLM(xlm)}
       {usdAmount !== null && <span className="text-gray-400 ml-1">≈ ${usdAmount} USD</span>}
     </span>
   )

@@ -109,7 +109,9 @@ export const TokenCreateForm: React.FC = () => {
   const updateStep = (index: number, status: ProgressStep['status']) => {
     setDeploymentSteps((prev) => {
       const updated = [...prev]
-      updated[index] = { ...updated[index], status }
+      const current = updated[index]
+      if (!current) return prev
+      updated[index] = { ...current, status }
       return updated
     })
   }
