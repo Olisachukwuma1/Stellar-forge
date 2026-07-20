@@ -24,6 +24,9 @@ export const NavBar: React.FC = () => {
         <NavLink to="/tokens" className={getLinkClass}>
           Tokens
         </NavLink>
+        <NavLink to="/explorer" className={getLinkClass}>
+          Explorer
+        </NavLink>
       </div>
     </nav>
   )

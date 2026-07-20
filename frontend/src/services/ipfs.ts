@@ -1,9 +1,32 @@
 // IPFS service for metadata upload via Pinata
 
 import { IPFS_CONFIG } from '../config/ipfs'
+import { isValidIPFSUri } from '../utils/validation'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif']
+
+export interface TokenMetadata {
+  name: string
+  description: string
+  image: string
+}
+
+/**
+ * Metadata JSON is pinned by whoever calls set_metadata for a token, so it's
+ * attacker-controlled. image must be a well-formed ipfs://<cid> value, not just
+ * any string, otherwise a malicious URL could flow straight into an <img src>.
+ */
+export function isTokenMetadata(value: unknown): value is TokenMetadata {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.name === 'string' &&
+    typeof v.description === 'string' &&
+    typeof v.image === 'string' &&
+    isValidIPFSUri(v.image)
+  )
+}
 
 export class IPFSConfigError extends Error {
   constructor(message: string) {
@@ -74,7 +97,7 @@ export class IPFSService {
   /**
    * Fetch and parse metadata JSON from an ipfs:// URI via the Pinata gateway.
    */
-  async getMetadata(uri: string): Promise<Record<string, unknown>> {
+  async getMetadata(uri: string): Promise<TokenMetadata> {
     if (!uri.startsWith('ipfs://')) {
       throw new IPFSUploadError(`Invalid IPFS URI: "${uri}". Expected format: ipfs://<CID>`)
     }
@@ -93,11 +116,20 @@ export class IPFSService {
       throw new IPFSUploadError(`Failed to fetch metadata (HTTP ${response.status}). The CID may not be pinned yet.`)
     }
 
+    let data: unknown
     try {
-      return (await response.json()) as Record<string, unknown>
+      data = await response.json()
     } catch {
       throw new IPFSUploadError('Metadata response is not valid JSON.')
     }
+
+    if (!isTokenMetadata(data)) {
+      throw new IPFSUploadError(
+        'Metadata is missing required fields or its image is not a well-formed ipfs:// URI.'
+      )
+    }
+
+    return data
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────

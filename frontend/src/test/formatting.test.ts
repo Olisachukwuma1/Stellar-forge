@@ -1,5 +1,33 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { formatTimestamp, timeAgo } from '../utils/formatting'
+import { formatTimestamp, timeAgo, ipfsToGatewayUrl } from '../utils/formatting'
+
+describe('ipfsToGatewayUrl', () => {
+  it('converts a valid ipfs:// CIDv0 URI to a Pinata gateway URL', () => {
+    const uri = 'ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco'
+    expect(ipfsToGatewayUrl(uri)).toBe(
+      'https://gateway.pinata.cloud/ipfs/QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco'
+    )
+  })
+
+  it('does not pass an arbitrary external URL through unchanged', () => {
+    expect(ipfsToGatewayUrl('https://evil.example.com/pixel.png')).not.toBe(
+      'https://evil.example.com/pixel.png'
+    )
+    expect(ipfsToGatewayUrl('https://evil.example.com/pixel.png')).toBeNull()
+  })
+
+  it('returns null for a data: URI', () => {
+    expect(ipfsToGatewayUrl('data:text/html,<script>alert(1)</script>')).toBeNull()
+  })
+
+  it('returns null for a malformed CID', () => {
+    expect(ipfsToGatewayUrl('ipfs://not-a-cid')).toBeNull()
+  })
+
+  it('returns null for an empty string', () => {
+    expect(ipfsToGatewayUrl('')).toBeNull()
+  })
+})
 
 describe('formatTimestamp', () => {
   it('formats a known timestamp correctly', () => {

@@ -1,5 +1,25 @@
 // Formatting utilities
 
+import { IPFS_CONFIG } from '../config/ipfs'
+import { isValidIPFSUri } from './validation'
+
+export const PLACEHOLDER_TOKEN_IMAGE =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#e5e7eb"/><text x="50" y="58" font-size="40" font-family="sans-serif" text-anchor="middle" fill="#9ca3af">?</text></svg>'
+  )
+
+/**
+ * Convert an ipfs:// URI to a fetchable gateway URL. Returns null for anything
+ * that isn't a well-formed ipfs:// URI so untrusted metadata can never smuggle
+ * an arbitrary external URL (tracking pixel, data: URI, etc.) into an <img src>.
+ */
+export const ipfsToGatewayUrl = (uri: string): string | null => {
+  if (!isValidIPFSUri(uri)) return null
+  const cid = uri.slice('ipfs://'.length)
+  return `${IPFS_CONFIG.pinataGateway}/${cid}`
+}
+
 export const formatXLM = (amount: string | number): string => {
   return `${parseFloat(amount.toString()).toFixed(7)} XLM`
 }
