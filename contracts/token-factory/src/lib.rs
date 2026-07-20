@@ -795,11 +795,7 @@ impl TokenFactory {
         // lightweight and works even when the factory is paused), so we guard
         // via a direct storage read/write rather than through `load_state`.
         let state_key = DataKey::State;
-        if let Some(mut state) = env
-            .storage()
-            .instance()
-            .get::<_, FactoryState>(&state_key)
-        {
+        if let Some(mut state) = env.storage().instance().get::<_, FactoryState>(&state_key) {
             if state.locked {
                 return Err(Error::Reentrancy);
             }
@@ -1132,5 +1128,7 @@ impl TokenFactory {
 #[cfg(test)]
 mod test;
 
-#[cfg(test)]
+// Benchmarks need a real token WASM installed in the env, which plain unit
+// tests can't provide; opt in via `cargo test --features bench bench_`.
+#[cfg(all(test, feature = "bench"))]
 mod bench;
