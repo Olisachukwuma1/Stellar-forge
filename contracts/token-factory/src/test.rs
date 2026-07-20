@@ -1000,8 +1000,7 @@ fn test_update_fees_negative_base_fee_rejected() {
 fn test_update_fees_negative_metadata_fee_rejected() {
     let s = Setup::new();
     assert_eq!(
-        s.client
-            .try_update_fees(&s.admin, &None, &Some(-1_i128)),
+        s.client.try_update_fees(&s.admin, &None, &Some(-1_i128)),
         Err(Ok(Error::InvalidParameters))
     );
     // State must be unchanged
@@ -1012,8 +1011,7 @@ fn test_update_fees_negative_metadata_fee_rejected() {
 fn test_update_fees_i128_min_rejected() {
     let s = Setup::new();
     assert_eq!(
-        s.client
-            .try_update_fees(&s.admin, &Some(i128::MIN), &None),
+        s.client.try_update_fees(&s.admin, &Some(i128::MIN), &None),
         Err(Ok(Error::InvalidParameters))
     );
 }
@@ -1022,8 +1020,7 @@ fn test_update_fees_i128_min_rejected() {
 fn test_update_fees_zero_allowed() {
     // Reducing to zero fee is valid — admin may want to offer free operations.
     let s = Setup::new();
-    s.client
-        .update_fees(&s.admin, &Some(0_i128), &Some(0_i128));
+    s.client.update_fees(&s.admin, &Some(0_i128), &Some(0_i128));
     let state = s.client.get_state();
     assert_eq!(state.base_fee, 0);
     assert_eq!(state.metadata_fee, 0);
@@ -1037,8 +1034,14 @@ fn test_update_fees_negative_does_not_corrupt_state() {
         .client
         .try_update_fees(&s.admin, &Some(-999_i128), &Some(-1_i128));
     let state = s.client.get_state();
-    assert_eq!(state.base_fee, 1_000, "base_fee must be unchanged after rejection");
-    assert_eq!(state.metadata_fee, 500, "metadata_fee must be unchanged after rejection");
+    assert_eq!(
+        state.base_fee, 1_000,
+        "base_fee must be unchanged after rejection"
+    );
+    assert_eq!(
+        state.metadata_fee, 500,
+        "metadata_fee must be unchanged after rejection"
+    );
 }
 
 // ── pause / unpause ───────────────────────────────────────────────────────────
@@ -1564,7 +1567,10 @@ fn test_mint_tokens_lock_released_after_success() {
     // Lock must be released after a successful call
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
-        assert!(!state.locked, "lock must be released after mint_tokens succeeds");
+        assert!(
+            !state.locked,
+            "lock must be released after mint_tokens succeeds"
+        );
     });
 }
 
@@ -1582,7 +1588,10 @@ fn test_mint_tokens_lock_released_after_error() {
 
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
-        assert!(!state.locked, "lock must be released after mint_tokens error");
+        assert!(
+            !state.locked,
+            "lock must be released after mint_tokens error"
+        );
     });
 }
 
@@ -1660,7 +1669,10 @@ fn test_set_metadata_lock_released_after_success() {
 
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
-        assert!(!state.locked, "lock must be released after set_metadata succeeds");
+        assert!(
+            !state.locked,
+            "lock must be released after set_metadata succeeds"
+        );
     });
 }
 
@@ -1677,9 +1689,7 @@ fn test_set_burn_enabled_reentrancy_guard() {
         s.env.storage().instance().set(&DataKey::State, &state);
     });
 
-    let result = s
-        .client
-        .try_set_burn_enabled(&token_addr, &creator, &false);
+    let result = s.client.try_set_burn_enabled(&token_addr, &creator, &false);
     assert_eq!(result, Err(Ok(Error::Reentrancy)));
 }
 
@@ -1693,7 +1703,10 @@ fn test_set_burn_enabled_lock_released_after_success() {
 
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance().get(&DataKey::State).unwrap();
-        assert!(!state.locked, "lock must be released after set_burn_enabled succeeds");
+        assert!(
+            !state.locked,
+            "lock must be released after set_burn_enabled succeeds"
+        );
     });
 }
 

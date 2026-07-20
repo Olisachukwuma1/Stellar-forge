@@ -399,16 +399,15 @@ fn bench_set_metadata() {
 #[test]
 fn bench_create_token_within_limits() {
     let s = BenchSetup::new();
-    s.client()
-        .create_token(
-            &s.creator,
-            &s.salt(0xDD),
-            &s.str("LimitCheck"),
-            &s.str("LCK"),
-            &7,
-            &100_000u128,
-            &1_000,
-        );
+    s.client().create_token(
+        &s.creator,
+        &s.salt(0xDD),
+        &s.str("LimitCheck"),
+        &s.str("LCK"),
+        &7,
+        &100_000u128,
+        &1_000,
+    );
 
     let res = s.env.cost_estimate().resources();
     // 50% of mainnet CPU limit
