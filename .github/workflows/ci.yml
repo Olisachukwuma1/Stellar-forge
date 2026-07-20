@@ -31,7 +31,7 @@ jobs:
         run: cargo build --target wasm32v1-none --release
         working-directory: contracts
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
 
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -167,7 +167,7 @@ jobs:
       - name: Start Local Stellar Network
         run: docker compose -f docker-compose.e2e.yml up -d
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
