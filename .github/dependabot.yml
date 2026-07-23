@@ -1,0 +1,73 @@
+version: 2
+updates:
+  # Frontend npm dependencies
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+    open-pull-requests-limit: 10
+    groups:
+      storybook:
+        patterns:
+          - '@storybook/*'
+          - 'storybook'
+          - '@chromatic-com/*'
+      testing:
+        patterns:
+          - '@testing-library/*'
+          - 'vitest'
+          - '@vitest/*'
+          - '@playwright/*'
+      typescript-eslint:
+        patterns:
+          - '@typescript-eslint/*'
+      vite:
+        patterns:
+          - 'vite'
+          - '@vitejs/*'
+          - 'vite-*'
+    labels:
+      - dependencies
+      - javascript
+
+  # Rust / Cargo dependencies — main contracts workspace
+  - package-ecosystem: cargo
+    directory: /contracts
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - rust
+
+  # Rust / Cargo dependencies — fuzz workspace (separate lockfile)
+  # contracts/token-factory/fuzz has its own [workspace] and Cargo.lock,
+  # so it must be listed as an independent entry to avoid its transitive
+  # dependencies falling behind the main workspace's audit coverage.
+  - package-ecosystem: cargo
+    directory: /contracts/token-factory/fuzz
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - rust
+      - fuzz
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
