@@ -54,7 +54,7 @@ pub struct TokenInfo {
 
 /// Current schema version written by `initialize` and bumped by `migrate`.
 /// Increment this constant whenever `FactoryState` gains new fields.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 #[contracttype]
 #[derive(Clone)]
@@ -114,6 +114,9 @@ pub struct FactoryState {
     /// Schema version of this state struct. Used by `migrate` to apply
     /// incremental upgrades without data loss.
     pub schema_version: u32,
+    /// When true, only addresses on the whitelist may call `create_token` or
+    /// `create_tokens_batch`.
+    pub whitelist_enabled: bool,
 }
 
 #[contracterror]
@@ -138,10 +141,12 @@ pub enum Error {
     MaxSupplyExceeded = 16,
     /// Fee split basis points do not sum to 10_000
     InvalidFeeSplit = 17,
-    /// `backfill_capped_supply` already applied for this token
-    AlreadyBackfilled = 18,
     /// Fee split recipient count exceeds `MAX_FEE_SPLIT_RECIPIENTS`
     TooManyFeeSplitRecipients = 18,
+    /// `backfill_capped_supply` already applied for this token
+    AlreadyBackfilled = 19,
+    /// Caller is not on the whitelist when whitelist enforcement is enabled
+    NotWhitelisted = 20,
 }
 
 #[contract]
@@ -174,31 +179,6 @@ const MAX_TOKENS_BY_CREATOR_PAGE: u32 = 50;
 /// `bench_fee_split_mint_20_within_limits` for the assertion that enforces
 /// this margin going forward.
 const MAX_FEE_SPLIT_RECIPIENTS: u32 = 20;
-
-/// Maximum number of recipients allowed in a single fee split map.
-///
-/// ## Rationale
-/// `distribute_fee` loops over every recipient in the split map and makes one
-/// external `token::transfer` call per recipient.  Each cross-contract call
-/// consumes ledger CPU and I/O budget, and the map itself is stored as a
-/// Soroban `Map` entry whose encoded size grows with the number of keys.
-/// Unbounded recipient counts therefore create two distinct DoS surfaces:
-///
-/// 1. **Transaction budget exhaustion** — enough recipients can push a single
-///    `create_token` / `mint_tokens` / `set_metadata` call over Stellar's
-///    per-transaction instruction limit, making the factory unusable.
-/// 2. **Ledger entry size overflow** — a sufficiently large `Map` could
-///    exceed the ~64 KB ledger entry size cap and cause the `set_fee_split`
-///    call itself to fail at the host level rather than at the contract level.
-///
-/// The cap of 10 is conservative and gives the admin ample flexibility
-/// (typical treasury + referral + protocol fund structures need ≤ 5) while
-/// keeping `distribute_fee` well within budget on any supported network.
-///
-/// Enforcement is in `set_fee_split`: attempts to configure more than
-/// `MAX_FEE_SPLIT_RECIPIENTS` recipients are rejected with
-/// `Error::InvalidFeeSplit` before any storage write occurs.
-pub const MAX_FEE_SPLIT_RECIPIENTS: u32 = 10;
 
 #[contractimpl]
 impl TokenFactory {
@@ -253,6 +233,7 @@ impl TokenFactory {
             base_fee,
             metadata_fee,
             token_count: 0,
+            whitelist_enabled: false,
             schema_version: CURRENT_SCHEMA_VERSION,
         };
 
@@ -339,6 +320,10 @@ impl TokenFactory {
         env.storage()
             .instance()
             .set(&Self::whitelist_key(&address), &true);
+        env.events().publish(
+            (symbol_short!("factory"), symbol_short!("wl_add")),
+            (address,),
+        );
         Ok(())
     }
 
@@ -351,6 +336,10 @@ impl TokenFactory {
         env.storage()
             .instance()
             .remove(&Self::whitelist_key(&address));
+        env.events().publish(
+            (symbol_short!("factory"), symbol_short!("wl_rm")),
+            (address,),
+        );
         Ok(())
     }
 
@@ -359,6 +348,21 @@ impl TokenFactory {
             .instance()
             .get(&Self::whitelist_key(&address))
             .unwrap_or(false)
+    }
+
+    pub fn set_whitelist_enabled(env: Env, admin: Address, enabled: bool) -> Result<(), Error> {
+        admin.require_auth();
+        let mut state = Self::load_state(&env)?;
+        if state.admin != admin {
+            return Err(Error::Unauthorized);
+        }
+        state.whitelist_enabled = enabled;
+        Self::save_state(&env, &state);
+        env.events().publish(
+            (symbol_short!("factory"), symbol_short!("wl_tog")),
+            (enabled,),
+        );
+        Ok(())
     }
 
     fn require_not_paused(env: &Env) -> Result<(), Error> {
@@ -435,6 +439,15 @@ impl TokenFactory {
         if fee_payment < state.base_fee {
             state.locked = false;
             return Err(Error::InsufficientFee);
+        }
+        // Whitelist gate: when enabled, only whitelisted addresses may create tokens.
+        if state.whitelist_enabled {
+            let wl_key = Self::whitelist_key(&creator);
+            let is_wl: bool = env.storage().instance().get(&wl_key).unwrap_or(false);
+            if !is_wl {
+                state.locked = false;
+                return Err(Error::NotWhitelisted);
+            }
         }
         // initial_supply is u128 but token::mint accepts i128.
         // Values > i128::MAX silently wrap via `as i128`; reject them early.
@@ -661,6 +674,14 @@ impl TokenFactory {
             .ok_or(Error::ArithmeticOverflow)?;
         if fee_payment < total_fee {
             return Err(Error::InsufficientFee);
+        }
+        // Whitelist gate: when enabled, only whitelisted addresses may create tokens.
+        if state.whitelist_enabled {
+            let wl_key = Self::whitelist_key(&creator);
+            let is_wl: bool = env.storage().instance().get(&wl_key).unwrap_or(false);
+            if !is_wl {
+                return Err(Error::NotWhitelisted);
+            }
         }
 
         state.locked = true;
@@ -990,14 +1011,12 @@ impl TokenFactory {
 
         // Fail fast on an oversized map before paying for the summation loop
         // below — see `MAX_FEE_SPLIT_RECIPIENTS` for why this bound exists.
-        if splits.len() > MAX_FEE_SPLIT_RECIPIENTS {
-            return Err(Error::TooManyFeeSplitRecipients);
         // Guard: cap the number of recipients to prevent transaction-budget
         // exhaustion and ledger-entry size overflow in `distribute_fee`.
-        // Exceeding the cap is rejected with `InvalidFeeSplit` so callers get
-        // a meaningful error rather than a silent host-level failure.
+        // Exceeding the cap is rejected with `TooManyFeeSplitRecipients` so
+        // callers get a meaningful error rather than a silent host-level failure.
         if splits.len() > MAX_FEE_SPLIT_RECIPIENTS {
-            return Err(Error::InvalidFeeSplit);
+            return Err(Error::TooManyFeeSplitRecipients);
         }
 
         let mut total: u32 = 0;
@@ -1113,6 +1132,18 @@ impl TokenFactory {
             s.schema_version = 2;
             Self::save_state(&env, &s);
             on_chain_version = 2;
+            env.storage().instance().set(&sv_key, &on_chain_version);
+        }
+
+        if on_chain_version < 3 {
+            // Version 3: add the `whitelist_enabled` field, defaulting to
+            // `false` so existing deployments keep their open behaviour until an
+            // admin explicitly enables enforcement via `set_whitelist_enabled`.
+            let mut s = Self::load_state(&env)?;
+            s.whitelist_enabled = false;
+            s.schema_version = 3;
+            Self::save_state(&env, &s);
+            on_chain_version = 3;
             env.storage().instance().set(&sv_key, &on_chain_version);
         }
 
@@ -1267,10 +1298,7 @@ impl TokenFactory {
     /// data, which cannot be trusted for tokens created outside the RPC's
     /// event-retention window. Returns `TokenNotFound` for unregistered
     /// addresses.
-    pub fn get_token_info_by_address(
-        env: Env,
-        token_address: Address,
-    ) -> Result<TokenInfo, Error> {
+    pub fn get_token_info_by_address(env: Env, token_address: Address) -> Result<TokenInfo, Error> {
         let index: u32 = env
             .storage()
             .instance()

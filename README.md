@@ -952,6 +952,7 @@ The factory contract supports in-place WASM upgrades without redeploying or migr
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1       | Initial versioned schema — added `schema_version` field to `FactoryState`                                                                                                                                                                                                                                                               |
 | 2       | Max-supply accounting fix (issue #1006) — `deploy_one` now seeds the per-token supply counter with `initial_supply`; version bump only, no `FactoryState` field changes. Pre-fix capped tokens must be back-filled individually via `backfill_capped_supply` (see [docs/contract-abi.md](./docs/contract-abi.md#supply-cap-accounting)) |
+| 3       | Added `whitelist_enabled: bool` to `FactoryState`; new `set_whitelist_enabled` entrypoint; `create_token` and `create_tokens_batch` enforce the whitelist gate when enabled                                                                                                                                                              |
 
 ### Adding a new migration (version N → N+1)
 
